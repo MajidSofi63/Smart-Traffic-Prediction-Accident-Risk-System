@@ -1,0 +1,4 @@
+import joblib
+# Save the accident risk prediction model
+joblib.dump(model_accident, 'accident_risk_model.joblib')
+print("Accident risk model saved as 'accident_risk_model.joblib'")
