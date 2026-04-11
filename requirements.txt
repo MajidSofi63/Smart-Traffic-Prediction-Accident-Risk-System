@@ -1,7 +1,6 @@
-%%writefile requirements.txt
+
 streamlit
 pandas
 scikit-learn
 numpy
 joblib
-print("requirements.txt created successfully.")
