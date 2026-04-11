@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Traffic Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial;
+            background: #0b1220;
+            color: white;
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        /* TOP CARDS */
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+
+        .card {
+            background: #1c2538;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .big {
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .green { color: #00ff88; }
+        .red { color: #ff4d4d; }
+        .orange { color: orange; }
+
+        /* MAIN GRID */
+        .main {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .box {
+            background: #1c2538;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        /* HEATMAP */
+        .heatmap {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 5px;
+            margin-top: 20px;
+        }
+
+        .cell {
+            padding: 10px;
+            text-align: center;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+
+        /* INCIDENT LIST */
+        .incident {
+            border-left: 4px solid orange;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #111;
+        }
+
+        .live {
+            color: #00ff88;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>🚦 Real-time Traffic Dashboard</h1>
+
+<!-- TOP CARDS -->
+<div class="cards">
+    <div class="card">
+        <div>Traffic Level</div>
+        <div class="big {{ traffic|lower }}">{{ traffic }}</div>
+    </div>
+
+    <div class="card">
+        <div>Accident Risk</div>
+        <div class="big {{ risk|lower }}">{{ risk }}</div>
+    </div>
+
+    <div class="card">
+        <div>Vehicles</div>
+        <div class="big">{{ vehicles }}</div>
+    </div>
+
+    <div class="card">
+        <div>Time</div>
+        <div class="big">{{ time }}:00</div>
+    </div>
+</div>
+
+<!-- GRAPH + RISK LIST -->
+<div class="main">
+
+    <!-- GRAPH -->
+    <div class="box">
+        <h3>Traffic + Risk Trend <span class="live">● LIVE</span></h3>
+        <canvas id="chart"></canvas>
+    </div>
+
+    <!-- RISK LIST -->
+    <div class="box">
+        <h3>Road Risk Scores</h3>
+
+        <div class="incident">NH-44 Overpass — <span class="red">Critical</span></div>
+        <div class="incident">Ring Road — <span class="orange">High</span></div>
+        <div class="incident">Airport Connector — <span class="orange">High</span></div>
+        <div class="incident">MG Road — <span class="orange">Medium</span></div>
+        <div class="incident">Sector 12 — <span class="green">Low</span></div>
+    </div>
+
+</div>
+
+<!-- HEATMAP -->
+<div class="box">
+    <h3>Accident Probability Heatmap</h3>
+
+    <div class="heatmap">
+        {% for i in range(50) %}
+            {% set val = (i*7) % 100 %}
+            <div class="cell" style="background: rgba(255,0,0, {{ val/100 }});">
+                {{ val }}%
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- INCIDENT FEED -->
+<div class="box">
+    <h3>Incident Feed <span class="live">● LIVE</span></h3>
+
+    <div class="incident">⚠ Multi-vehicle collision — 2 injured</div>
+    <div class="incident">🚧 Road work — lane closed</div>
+    <div class="incident">⚠ Debris on road</div>
+    <div class="incident">✅ Accident cleared</div>
+</div>
+
+<script>
+    let traffic = "{{ traffic }}";
+    let risk = "{{ risk }}";
+
+    let valueMap = {
+        "Low": 30,
+        "Medium": 60,
+        "High": 90
+    };
+
+    new Chart(document.getElementById("chart"), {
+        type: "line",
+        data: {
+            labels: ["Now","1h","2h","3h","4h","5h","6h","7h"],
+            datasets: [
+                {
+                    label: "Traffic",
+                    data: [30,40,50,60,70,80,70,60],
+                    borderColor: "#00ff88",
+                    fill: false
+                },
+                {
+                    label: "Risk",
+                    data: [20,30,40,50,60,70,60,50],
+                    borderColor: "red",
+                    fill: false
+                }
+            ]
+        },
+        options: {
+            animation: { duration: 1500 }
+        }
+    });
+</script>
+
+<br>
+<a href="/" style="color:white;">⬅ Back</a>
+
+</body>
+</html>
