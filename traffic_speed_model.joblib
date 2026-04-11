@@ -1,0 +1,5 @@
+import joblib
+
+# Save the traffic speed prediction model
+joblib.dump(model, 'traffic_speed_model.joblib')
+print("Traffic speed model saved as 'traffic_speed_model.joblib'")
