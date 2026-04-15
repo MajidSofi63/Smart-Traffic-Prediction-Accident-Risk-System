@@ -1,53 +1,228 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Smart Traffic System</title>
+    <title>Accident Risk Prediction System</title>
     <style>
         body {
-            font-family: Arial;
-            background: linear-gradient(to right, #1e3c72, #2a5298);
-            color: white;
-            text-align: center;
-            padding-top: 50px;
-        }
-        form {
-            background: white;
-            color: black;
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
             padding: 20px;
-            border-radius: 10px;
-            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
         }
-        input, select {
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+            font-size: 14px;
+        }
+        select, input {
+            width: 100%;
             padding: 10px;
-            margin: 10px;
-            width: 200px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
         }
         button {
-            padding: 10px 20px;
-            background: #2a5298;
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
+            border-radius: 8px;
             cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 10px;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        h3 {
+            color: #667eea;
+            margin-top: 20px;
+            margin-bottom: 15px;
+        }
+        hr {
+            margin: 20px 0;
+            border: none;
+            border-top: 2px solid #f0f0f0;
+        }
+        .info-note {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            color: #666;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .accuracy-badge {
+            background-color: #4CAF50;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            display: inline-block;
+            margin-bottom: 20px;
         }
     </style>
 </head>
 <body>
-
-<h1>🚦 Smart Traffic Prediction</h1>
-
-<form action="/predict" method="post">
-    <input type="number" name="time" placeholder="Enter Time (0-23)" required><br>
-
-    <select name="weather">
-        <option value="clear">Clear</option>
-        <option value="rain">Rain</option>
-        <option value="fog">Fog</option>
-    </select><br>
-
-    <input type="number" name="vehicles" placeholder="Number of Vehicles" required><br>
-
-    <button type="submit">Predict</button>
-</form>
-
+    <div class="container">
+        <h1>🚗 Smart Traffic Prediction & Accident Risk System</h1>
+        <div style="text-align: center;">
+            <span class="accuracy-badge">Model Accuracy: 85.5%</span>
+        </div>
+        
+        <form action="/predict" method="post">
+            <h3>📅 Time & Location</h3>
+            <div class="row">
+                <div class="form-group">
+                    <label>Day of Week:</label>
+                    <select name="Day_of_Week" required>
+                        <option value="Monday">Monday</option>
+                        <option value="Tuesday">Tuesday</option>
+                        <option value="Wednesday">Wednesday</option>
+                        <option value="Thursday">Thursday</option>
+                        <option value="Friday">Friday</option>
+                        <option value="Saturday">Saturday</option>
+                        <option value="Sunday">Sunday</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Area Type:</label>
+                    <select name="Urban_or_Rural_Area" required>
+                        <option value="Urban">Urban</option>
+                        <option value="Rural">Rural</option>
+                    </select>
+                </div>
+            </div>
+            
+            <h3>🛣️ Road Conditions</h3>
+            <div class="row">
+                <div class="form-group">
+                    <label>Junction Control:</label>
+                    <select name="Junction_Control" required>
+                        <option value="Give way or uncontrolled">Give way or uncontrolled</option>
+                        <option value="Auto traffic signal">Auto traffic signal</option>
+                        <option value="Stop sign">Stop sign</option>
+                        <option value="Not at junction or within 20m">Not at junction or within 20m</option>
+                        <option value="Entering from slip road">Entering from slip road</option>
+                        <option value="Other junction">Other junction</option>
+                        <option value="Unknown">Unknown</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Road Type:</label>
+                    <select name="Road_Type" required>
+                        <option value="Single carriageway">Single carriageway</option>
+                        <option value="Dual carriageway">Dual carriageway</option>
+                        <option value="Roundabout">Roundabout</option>
+                        <option value="One way street">One way street</option>
+                        <option value="Slip road">Slip road</option>
+                        <option value="Unknown">Unknown</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="form-group">
+                    <label>Road Surface Conditions:</label>
+                    <select name="Road_Surface_Conditions" required>
+                        <option value="Dry">Dry</option>
+                        <option value="Wet or damp">Wet or damp</option>
+                        <option value="Snow">Snow</option>
+                        <option value="Frost or ice">Frost or ice</option>
+                        <option value="Flood over 3cm. deep">Flood over 3cm. deep</option>
+                        <option value="Unknown">Unknown</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Speed Limit (mph):</label>
+                    <input type="number" name="Speed_limit" value="30" min="10" max="70" step="1" required>
+                </div>
+            </div>
+            
+            <h3>☁️ Environmental Conditions</h3>
+            <div class="row">
+                <div class="form-group">
+                    <label>Light Conditions:</label>
+                    <select name="Light_Conditions" required>
+                        <option value="Daylight">Daylight</option>
+                        <option value="Darkness - lights lit">Darkness - lights lit</option>
+                        <option value="Darkness - lights unlit">Darkness - lights unlit</option>
+                        <option value="Darkness - no lighting">Darkness - no lighting</option>
+                        <option value="Unknown">Unknown</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Weather Conditions:</label>
+                    <select name="Weather_Conditions" required>
+                        <option value="Fine no high winds">Fine no high winds</option>
+                        <option value="Fine + high winds">Fine + high winds</option>
+                        <option value="Raining no high winds">Raining no high winds</option>
+                        <option value="Raining + high winds">Raining + high winds</option>
+                        <option value="Snowing no high winds">Snowing no high winds</option>
+                        <option value="Snowing + high winds">Snowing + high winds</option>
+                        <option value="Fog or mist">Fog or mist</option>
+                        <option value="Other">Other</option>
+                        <option value="Unknown">Unknown</option>
+                    </select>
+                </div>
+            </div>
+            
+            <h3>🚑 Accident Details</h3>
+            <div class="row">
+                <div class="form-group">
+                    <label>Number of Vehicles Involved:</label>
+                    <input type="number" name="Number_of_Vehicles" min="1" max="10" value="2" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Number of Casualties:</label>
+                    <input type="number" name="Number_of_Casualties" min="0" max="20" value="1" required>
+                </div>
+            </div>
+            
+            <hr>
+            <button type="submit">🔍 Predict Accident Severity</button>
+        </form>
+        <div class="info-note">
+            ℹ️ Based on historical accident data from 307,973 incidents | Model accuracy: 85.5%<br>
+            ⚠️ Note: Weather conditions must match exactly: 'Fine no high winds', 'Raining no high winds', 'Snowing no high winds', etc.
+        </div>
+    </div>
 </body>
 </html>
