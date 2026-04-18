@@ -5,6 +5,7 @@ import numpy as np
 import joblib
 import os
 import sys
+import requests
 
 app = Flask(__name__)
 
@@ -38,12 +39,16 @@ def load_models():
 
 # Load models when the app starts
 with app.app_context():
-    if not load_models():
-        print("WARNING: Models failed to load. The app may not work correctly.")
+    load_models()
 
 @app.route('/')
 def home():
     return render_template('index.html')
+
+@app.route('/map')
+def map_route():
+    """Show interactive map for route planning"""
+    return render_template('map_route.html')
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -87,7 +92,6 @@ def predict():
                 try:
                     input_df[column] = le.transform(input_df[column].astype(str))
                 except ValueError as e:
-                    valid_values = le.classes_.tolist()
                     return render_template('result.html', 
                                          severity="Error", 
                                          confidence=0,
@@ -112,202 +116,6 @@ def predict():
                              severity="Error", 
                              confidence=0,
                              error=f"Prediction error: {str(e)}")
-
-@app.route('/debug')
-def debug():
-    """Debug endpoint to see all valid values for each field"""
-    if model is None:
-        return jsonify({'error': 'Model not loaded'})
-    
-    debug_info = {}
-    for col, encoder in label_encoders.items():
-        debug_info[col] = {
-            'type': 'categorical',
-            'valid_values': encoder.classes_.tolist()
-        }
-    
-    # Add numeric columns info
-    numeric_cols = ['Speed_limit', 'Number_of_Vehicles', 'Number_of_Casualties']
-    for col in numeric_cols:
-        if col in features:
-            debug_info[col] = {
-                'type': 'numeric',
-                'valid_values': 'any integer value'
-            }
-    
-    return jsonify(debug_info)
-
-@app.route('/health')
-def health_check():
-    """Health check endpoint for Render"""
-    return jsonify({
-        "status": "healthy",
-        "models_loaded": model is not None,
-        "features": features
-    })
-
-@app.route('/valid_values')
-def valid_values():
-    """Show all valid values for each field in HTML format"""
-    if model is None:
-        return "<html><body><h1>Model not loaded. Please check server logs.</h1></body></html>"
-    
-    valid_values_html = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Valid Values for Accident Prediction System</title>
-        <style>
-            body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-            .container { background-color: white; padding: 30px; border-radius: 15px; }
-            h1 { color: #333; text-align: center; }
-            h2 { color: #667eea; border-bottom: 2px solid #667eea; padding-bottom: 10px; margin-top: 30px; }
-            ul { list-style-type: none; padding: 0; }
-            li { background-color: #f5f5f5; margin: 8px 0; padding: 10px; border-radius: 5px; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>Valid Values for Accident Prediction System</h1>
-    """
-    
-    for col, encoder in label_encoders.items():
-        valid_values_html += f"<h2>{col}</h2><ul>"
-        for val in encoder.classes_:
-            valid_values_html += f"<li>{val}</li>"
-        valid_values_html += "</ul>"
-    
-    valid_values_html += "</div></body></html>"
-    return valid_values_html
-
-@app.route('/dynamic_form')
-def dynamic_form():
-    """Dynamic form that loads valid values directly from the model"""
-    if model is None:
-        return "<html><body><h1>Model not loaded. Please check server logs.</h1></body></html>"
-    
-    # Get valid values for each field
-    field_values = {}
-    for col, encoder in label_encoders.items():
-        field_values[col] = encoder.classes_.tolist()
-    
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Accident Risk Prediction System - Dynamic Form</title>
-        <style>
-            body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-            .container { background-color: white; padding: 30px; border-radius: 15px; }
-            h1 { color: #333; text-align: center; }
-            .form-group { margin-bottom: 20px; }
-            label { display: block; margin-bottom: 8px; font-weight: bold; }
-            select, input { width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 8px; }
-            button { width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; }
-            .row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-            h3 { color: #667eea; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>Smart Traffic Prediction & Accident Risk System</h1>
-            <form action="/predict" method="post">
-                <div class="row">
-                    <div class="form-group">
-                        <label>Day of Week:</label>
-                        <select name="Day_of_Week" required>
-                            {% for val in field_values['Day_of_Week'] %}
-                            <option value="{{ val }}">{{ val }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Urban or Rural Area:</label>
-                        <select name="Urban_or_Rural_Area" required>
-                            {% for val in field_values['Urban_or_Rural_Area'] %}
-                            <option value="{{ val }}">{{ val }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="form-group">
-                        <label>Junction Control:</label>
-                        <select name="Junction_Control" required>
-                            {% for val in field_values['Junction_Control'] %}
-                            <option value="{{ val }}">{{ val }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Road Type:</label>
-                        <select name="Road_Type" required>
-                            {% for val in field_values['Road_Type'] %}
-                            <option value="{{ val }}">{{ val }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="form-group">
-                        <label>Road Surface Conditions:</label>
-                        <select name="Road_Surface_Conditions" required>
-                            {% for val in field_values['Road_Surface_Conditions'] %}
-                            <option value="{{ val }}">{{ val }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Speed Limit (mph):</label>
-                        <input type="number" name="Speed_limit" value="30" required>
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="form-group">
-                        <label>Light Conditions:</label>
-                        <select name="Light_Conditions" required>
-                            {% for val in field_values['Light_Conditions'] %}
-                            <option value="{{ val }}">{{ val }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Weather Conditions:</label>
-                        <select name="Weather_Conditions" required>
-                            {% for val in field_values['Weather_Conditions'] %}
-                            <option value="{{ val }}">{{ val }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="form-group">
-                        <label>Number of Vehicles:</label>
-                        <input type="number" name="Number_of_Vehicles" min="1" value="2" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Number of Casualties:</label>
-                        <input type="number" name="Number_of_Casualties" min="0" value="1" required>
-                    </div>
-                </div>
-                <button type="submit">Predict Accident Severity</button>
-            </form>
-        </div>
-    </body>
-    </html>
-    ''', field_values=field_values)
-
-if __name__ == '__main__':
-    # Get port from environment variable or default to 10000
-    port = int(os.environ.get('PORT', 10000))
-    # Disable debug mode in production
-    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    app.run(host='0.0.0.0', port=port, debug=debug_mode)
-
-@app.route('/map')
-def map_route():
-    """Show interactive map for route planning"""
-    return render_template('map_route.html')
 
 @app.route('/predict_route_risk', methods=['POST'])
 def predict_route_risk():
@@ -360,19 +168,53 @@ def predict_route_risk():
 @app.route('/geocode', methods=['GET'])
 def geocode():
     """Geocode an address to coordinates"""
-    import requests
     address = request.args.get('address', '')
     if not address:
         return jsonify({'error': 'No address provided'})
     
     url = f"https://nominatim.openstreetmap.org/search?format=json&q={address}&limit=1"
-    response = requests.get(url, headers={'User-Agent': 'TrafficRiskApp/1.0'})
-    data = response.json()
+    try:
+        response = requests.get(url, headers={'User-Agent': 'TrafficRiskApp/1.0'})
+        data = response.json()
+        
+        if data:
+            return jsonify({
+                'lat': float(data[0]['lat']),
+                'lon': float(data[0]['lon']),
+                'display_name': data[0]['display_name']
+            })
+    except Exception as e:
+        return jsonify({'error': str(e)})
     
-    if data:
-        return jsonify({
-            'lat': float(data[0]['lat']),
-            'lon': float(data[0]['lon']),
-            'display_name': data[0]['display_name']
-        })
-    return jsonify({'error': 'Location not found'})    
+    return jsonify({'error': 'Location not found'})
+
+@app.route('/debug')
+def debug():
+    """Debug endpoint to see all valid values for each field"""
+    if model is None:
+        return jsonify({'error': 'Model not loaded'})
+    
+    debug_info = {}
+    for col, encoder in label_encoders.items():
+        debug_info[col] = {
+            'type': 'categorical',
+            'valid_values': encoder.classes_.tolist()
+        }
+    
+    return jsonify(debug_info)
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Render"""
+    return jsonify({
+        "status": "healthy",
+        "models_loaded": model is not None,
+        "features": features
+    })
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 10000))
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)@app.route('/test_map')
+def test_map():
+    return "<h1>Map route working!</h1><p>If you see this, the route is accessible.</p><a href='/map'>Go to Map</a>"
