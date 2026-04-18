@@ -4,3 +4,7 @@ numpy==2.4.4
 scikit-learn==1.8.0
 gunicorn==25.3.0
 joblib==1.5.3
+folium==0.15.1
+geopy==2.4.1
+requests==2.31.0
+branca==0.7.0

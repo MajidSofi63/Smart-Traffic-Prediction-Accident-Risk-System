@@ -303,3 +303,76 @@ if __name__ == '__main__':
     # Disable debug mode in production
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     app.run(host='0.0.0.0', port=port, debug=debug_mode)
+
+@app.route('/map')
+def map_route():
+    """Show interactive map for route planning"""
+    return render_template('map_route.html')
+
+@app.route('/predict_route_risk', methods=['POST'])
+def predict_route_risk():
+    """Predict risk for a specific route segment"""
+    try:
+        data = request.json
+        
+        # Prepare features for ML model
+        input_data = {
+            'Day_of_Week': data.get('day_of_week', 'Monday'),
+            'Junction_Control': data.get('junction_control', 'Not at junction or within 20m'),
+            'Light_Conditions': data.get('light_conditions', 'Daylight'),
+            'Road_Surface_Conditions': data.get('road_surface', 'Dry'),
+            'Road_Type': data.get('road_type', 'Single carriageway'),
+            'Speed_limit': data.get('speed_limit', 50),
+            'Urban_or_Rural_Area': data.get('area_type', 'Urban'),
+            'Weather_Conditions': data.get('weather', 'Fine no high winds'),
+            'Number_of_Vehicles': data.get('vehicles', 2),
+            'Number_of_Casualties': data.get('casualties', 1)
+        }
+        
+        # Convert to DataFrame
+        input_df = pd.DataFrame([input_data])
+        
+        # Encode categorical variables
+        for column in input_df.columns:
+            if column in label_encoders:
+                le = label_encoders[column]
+                try:
+                    input_df[column] = le.transform(input_df[column].astype(str))
+                except:
+                    input_df[column] = 0
+        
+        # Make prediction
+        prediction = model.predict(input_df)
+        predicted_severity = target_encoder.inverse_transform(prediction)[0]
+        
+        # Get confidence
+        probabilities = model.predict_proba(input_df)[0]
+        confidence = max(probabilities) * 100
+        
+        return jsonify({
+            'severity': predicted_severity,
+            'confidence': round(confidence, 2)
+        })
+        
+    except Exception as e:
+        return jsonify({'severity': 'Unknown', 'confidence': 0, 'error': str(e)})
+
+@app.route('/geocode', methods=['GET'])
+def geocode():
+    """Geocode an address to coordinates"""
+    import requests
+    address = request.args.get('address', '')
+    if not address:
+        return jsonify({'error': 'No address provided'})
+    
+    url = f"https://nominatim.openstreetmap.org/search?format=json&q={address}&limit=1"
+    response = requests.get(url, headers={'User-Agent': 'TrafficRiskApp/1.0'})
+    data = response.json()
+    
+    if data:
+        return jsonify({
+            'lat': float(data[0]['lat']),
+            'lon': float(data[0]['lon']),
+            'display_name': data[0]['display_name']
+        })
+    return jsonify({'error': 'Location not found'})    

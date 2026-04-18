@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Route Risk Prediction - Smart Traffic System</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        .sidebar {
+            width: 350px;
+            background: white;
+            padding: 20px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            z-index: 10;
+        }
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        h2 {
+            color: #667eea;
+            margin-top: 0;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        .risk-card {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+        }
+        .risk-card.show {
+            display: block;
+            animation: slideIn 0.5s ease;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .risk-level {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .risk-low {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .risk-medium {
+            background-color: #ff9800;
+            color: white;
+        }
+        .risk-high {
+            background-color: #f44336;
+            color: white;
+        }
+        .route-info {
+            margin: 10px 0;
+            padding: 10px;
+            background: #e3f2fd;
+            border-radius: 5px;
+        }
+        .current-location {
+            background-color: #2196F3;
+            color: white;
+            margin-top: 10px;
+        }
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+            font-size: 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            display: inline-block;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2>🚗 Route Risk Predictor</h2>
+            
+            <div class="form-group">
+                <label>📍 Start Point:</label>
+                <input type="text" id="start" placeholder="Enter address or click on map" value="New Delhi, India">
+            </div>
+            
+            <div class="form-group">
+                <label>🏁 Destination:</label>
+                <input type="text" id="end" placeholder="Enter address or click on map" value="Mumbai, India">
+            </div>
+            
+            <div class="form-group">
+                <label>🚗 Vehicle Type:</label>
+                <select id="vehicle_type">
+                    <option value="Car">Car</option>
+                    <option value="Motorcycle">Motorcycle</option>
+                    <option value="Taxi/Private hire car">Taxi</option>
+                    <option value="Bus">Bus</option>
+                    <option value="Goods vehicle">Truck</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>⏰ Time of Day:</label>
+                <select id="time_of_day">
+                    <option value="Morning">Morning (6AM - 12PM)</option>
+                    <option value="Afternoon">Afternoon (12PM - 5PM)</option>
+                    <option value="Evening">Evening (5PM - 9PM)</option>
+                    <option value="Night">Night (9PM - 6AM)</option>
+                </select>
+            </div>
+            
+            <button onclick="getCurrentLocation()" class="current-location">📍 Use My Current Location</button>
+            <button onclick="calculateRoute()">🔍 Calculate Route & Risk</button>
+            
+            <div id="riskCard" class="risk-card">
+                <h3>⚠️ Route Risk Assessment</h3>
+                <div id="riskLevel" class="risk-level"></div>
+                <div id="routeInfo" class="route-info"></div>
+                <div id="riskFactors" style="margin-top: 10px;"></div>
+                <div id="recommendation" style="margin-top: 10px; padding: 10px; background: #fff3e0; border-radius: 5px;"></div>
+            </div>
+        </div>
+        
+        <div class="map-container">
+            <div id="map"></div>
+            <div class="legend">
+                <strong>Risk Levels:</strong><br>
+                <span class="legend-color" style="background: #4CAF50;"></span> Low Risk<br>
+                <span class="legend-color" style="background: #ff9800;"></span> Medium Risk<br>
+                <span class="legend-color" style="background: #f44336;"></span> High Risk
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let map;
+        let routingControl;
+        
+        // Initialize map
+        function initMap() {
+            map = L.map('map').setView([20.5937, 78.9629], 5);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors'
+            }).addTo(map);
+            
+            // Add click handler to set points
+            map.on('click', function(e) {
+                const lat = e.latlng.lat;
+                const lng = e.latlng.lng;
+                if (!routingControl) {
+                    document.getElementById('start').value = `${lat}, ${lng}`;
+                } else if (routingControl.getWaypoints().length < 2) {
+                    document.getElementById('end').value = `${lat}, ${lng}`;
+                }
+            });
+        }
+        
+        // Get current location
+        function getCurrentLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    document.getElementById('start').value = `${lat}, ${lng}`;
+                    map.setView([lat, lng], 13);
+                    L.marker([lat, lng]).addTo(map).bindPopup('Your Location').openPopup();
+                });
+            } else {
+                alert("Geolocation not supported");
+            }
+        }
+        
+        // Calculate route and risk
+        async function calculateRoute() {
+            const start = document.getElementById('start').value;
+            const end = document.getElementById('end').value;
+            const vehicleType = document.getElementById('vehicle_type').value;
+            const timeOfDay = document.getElementById('time_of_day').value;
+            
+            if (!start || !end) {
+                alert("Please enter both start and destination");
+                return;
+            }
+            
+            // Show loading
+            document.getElementById('riskCard').classList.add('show');
+            document.getElementById('riskLevel').innerHTML = "Calculating...";
+            
+            try {
+                // Geocode addresses to coordinates
+                const startCoords = await geocodeAddress(start);
+                const endCoords = await geocodeAddress(end);
+                
+                if (!startCoords || !endCoords) {
+                    throw new Error("Could not find locations");
+                }
+                
+                // Get route from OSRM
+                const route = await getRoute(startCoords, endCoords);
+                
+                // Display route on map
+                displayRoute(route);
+                
+                // Calculate risk based on route and conditions
+                const riskAssessment = await calculateRisk(route, vehicleType, timeOfDay);
+                
+                // Display risk assessment
+                displayRiskAssessment(riskAssessment);
+                
+            } catch (error) {
+                console.error(error);
+                document.getElementById('riskLevel').innerHTML = "Error calculating route";
+                document.getElementById('riskLevel').className = "risk-level risk-high";
+            }
+        }
+        
+        async function geocodeAddress(address) {
+            // Using Nominatim (OpenStreetMap) for geocoding
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                if (data && data[0]) {
+                    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+                }
+            } catch (error) {
+                console.error("Geocoding error:", error);
+            }
+            return null;
+        }
+        
+        async function getRoute(start, end) {
+            const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.code !== 'Ok') {
+                throw new Error("Route not found");
+            }
+            
+            return {
+                distance: data.routes[0].distance / 1000, // km
+                duration: data.routes[0].duration / 60, // minutes
+                geometry: data.routes[0].geometry,
+                steps: data.routes[0].legs[0].steps
+            };
+        }
+        
+        function displayRoute(route) {
+            if (routingControl) {
+                map.removeControl(routingControl);
+            }
+            
+            // Add the route line
+            const routeLayer = L.geoJSON(route.geometry, {
+                style: { color: '#2196F3', weight: 5, opacity: 0.7 }
+            }).addTo(map);
+            
+            map.fitBounds(routeLayer.getBounds());
+            
+            // Store route info for risk calculation display
+            window.currentRoute = route;
+        }
+        
+        async function calculateRisk(route, vehicleType, timeOfDay) {
+            // Sample risk calculation based on route characteristics
+            const distance = route.distance;
+            const duration = route.duration;
+            const avgSpeed = distance / (duration / 60);
+            
+            // Risk factors
+            let riskScore = 0;
+            let riskFactors = [];
+            
+            // Factor 1: Distance (longer routes = higher risk)
+            if (distance > 500) {
+                riskScore += 30;
+                riskFactors.push("⚠️ Long distance route (>500km)");
+            } else if (distance > 200) {
+                riskScore += 15;
+                riskFactors.push("📏 Moderate distance route");
+            }
+            
+            // Factor 2: Speed (higher speed = higher risk)
+            if (avgSpeed > 100) {
+                riskScore += 25;
+                riskFactors.push("🏁 High average speed (>100 km/h)");
+            } else if (avgSpeed > 80) {
+                riskScore += 15;
+                riskFactors.push("⚡ Moderate to high speed");
+            }
+            
+            // Factor 3: Time of day
+            if (timeOfDay === 'Night') {
+                riskScore += 25;
+                riskFactors.push("🌙 Night travel (reduced visibility)");
+            } else if (timeOfDay === 'Evening') {
+                riskScore += 10;
+                riskFactors.push("🌆 Evening travel (peak accident hours)");
+            }
+            
+            // Factor 4: Vehicle type
+            if (vehicleType === 'Motorcycle') {
+                riskScore += 15;
+                riskFactors.push("🏍️ Motorcycle (higher vulnerability)");
+            } else if (vehicleType === 'Goods vehicle') {
+                riskScore += 10;
+                riskFactors.push("🚛 Heavy vehicle (longer stopping distance)");
+            }
+            
+            // Determine risk level
+            let riskLevel = "Low";
+            let riskColor = "risk-low";
+            if (riskScore >= 50) {
+                riskLevel = "High";
+                riskColor = "risk-high";
+            } else if (riskScore >= 25) {
+                riskLevel = "Medium";
+                riskColor = "risk-medium";
+            }
+            
+            // Get prediction from your ML model
+            const mlPrediction = await getMLPrediction(vehicleType, timeOfDay, avgSpeed);
+            
+            return {
+                riskLevel: riskLevel,
+                riskScore: riskScore,
+                riskColor: riskColor,
+                riskFactors: riskFactors,
+                distance: distance,
+                duration: duration,
+                avgSpeed: avgSpeed,
+                mlPrediction: mlPrediction
+            };
+        }
+        
+        async function getMLPrediction(vehicleType, timeOfDay, speed) {
+            // Call your Flask backend for ML prediction
+            try {
+                const response = await fetch('/predict_route_risk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        vehicle_type: vehicleType,
+                        time_of_day: timeOfDay,
+                        speed_limit: Math.round(speed),
+                        road_type: "Dual carriageway",
+                        weather: "Fine no high winds",
+                        light_conditions: timeOfDay === 'Night' ? "Darkness - lights lit" : "Daylight"
+                    })
+                });
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error("ML prediction error:", error);
+                return { severity: "Unknown", confidence: 0 };
+            }
+        }
+        
+        function displayRiskAssessment(assessment) {
+            const riskLevelDiv = document.getElementById('riskLevel');
+            riskLevelDiv.innerHTML = assessment.riskLevel + " Risk";
+            riskLevelDiv.className = "risk-level " + assessment.riskColor;
+            
+            document.getElementById('routeInfo').innerHTML = `
+                📍 Distance: ${assessment.distance.toFixed(1)} km<br>
+                ⏱️ Duration: ${assessment.duration.toFixed(0)} minutes<br>
+                🚗 Average Speed: ${assessment.avgSpeed.toFixed(0)} km/h
+            `;
+            
+            let riskFactorsHtml = "<strong>Risk Factors:</strong><ul>";
+            assessment.riskFactors.forEach(factor => {
+                riskFactorsHtml += `<li>${factor}</li>`;
+            });
+            riskFactorsHtml += "</ul>";
+            
+            if (assessment.mlPrediction && assessment.mlPrediction.severity) {
+                riskFactorsHtml += `<br><strong>🤖 ML Model Prediction:</strong><br>
+                    Severity: ${assessment.mlPrediction.severity}<br>
+                    Confidence: ${assessment.mlPrediction.confidence}%`;
+            }
+            
+            document.getElementById('riskFactors').innerHTML = riskFactorsHtml;
+            
+            let recommendation = "";
+            if (assessment.riskLevel === "High") {
+                recommendation = "🚨 HIGH RISK: Consider alternative route, travel during daytime, reduce speed, and stay alert!";
+            } else if (assessment.riskLevel === "Medium") {
+                recommendation = "⚠️ MEDIUM RISK: Exercise caution, follow traffic rules, and avoid distractions.";
+            } else {
+                recommendation = "✅ LOW RISK: Safe journey! Continue following traffic regulations.";
+            }
+            document.getElementById('recommendation').innerHTML = recommendation;
+        }
+        
+        // Initialize map when page loads
+        window.onload = initMap;
+    </script>
+</body>
+</html>
