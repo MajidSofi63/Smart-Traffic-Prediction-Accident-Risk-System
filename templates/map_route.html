@@ -301,24 +301,164 @@
         }
         
         async function calculateRiskWithML(route, vehicleType, timeOfDay, userEmail) {
-            const distance = route.distance, duration = route.duration, avgSpeed = distance / (duration / 60);
-            const dayMap = { 'Morning': 'Monday', 'Afternoon': 'Tuesday', 'Evening': 'Friday', 'Night': 'Saturday' };
-            const lightMap = { 'Morning': 'Daylight', 'Afternoon': 'Daylight', 'Evening': 'Darkness - lights lit', 'Night': 'Darkness - no lighting' };
-            try {
-                const response = await fetch('/predict_route_risk', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ day_of_week: dayMap[timeOfDay], light_conditions: lightMap[timeOfDay], vehicle_type: vehicleType, time_of_day: timeOfDay, speed_limit: Math.round(avgSpeed), area_type: distance > 100 ? 'Rural' : 'Urban', weather: 'Fine no high winds', road_surface: 'Dry', vehicles: 2, casualties: 1, user_email: userEmail })
-                });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const data = await response.json();
-                return { risk_level: data.severity === 'Fatal' || data.severity === 'Serious' ? 'High' : (data.severity === 'Slight' ? 'Low' : 'Medium'), confidence: data.confidence, explanations: data.explanations || [], recommendations: data.recommendations || [], alert_needed: data.alert_needed || false, distance, duration, avgSpeed };
-            } catch (error) {
-                console.error('ML error, using fallback:', error);
-                let riskScore = 0; if (distance > 500) riskScore += 30; if (avgSpeed > 100) riskScore += 25; if (timeOfDay === 'Night') riskScore += 25; if (vehicleType === 'Motorcycle') riskScore += 15;
-                let riskLevel = riskScore >= 50 ? "High" : (riskScore >= 25 ? "Medium" : "Low");
-                return { risk_level: riskLevel, confidence: 85, explanations: [`Distance: ${distance.toFixed(0)} km`, `Speed: ${avgSpeed.toFixed(0)} km/h`, `Time: ${timeOfDay}`], recommendations: ["Drive cautiously", "Take regular breaks"], alert_needed: riskLevel === "High", distance, duration, avgSpeed };
-            }
+    const distance = route.distance;
+    const duration = route.duration;
+    const avgSpeed = distance / (duration / 60);
+    
+    // MORE SENSITIVE RISK CALCULATION
+    let riskScore = 0;
+    let riskFactors = [];
+    
+    // Distance risk (LONGER = HIGHER RISK)
+    if (distance > 500) {
+        riskScore += 40;
+        riskFactors.push(`🔴 Very long distance (${distance.toFixed(0)} km) - High fatigue risk`);
+    } else if (distance > 200) {
+        riskScore += 25;
+        riskFactors.push(`🟠 Long distance (${distance.toFixed(0)} km) - Fatigue possible`);
+    } else if (distance > 100) {
+        riskScore += 15;
+        riskFactors.push(`🟡 Moderate distance (${distance.toFixed(0)} km)`);
+    }
+    
+    // Speed risk (HIGHER SPEED = HIGHER RISK)
+    if (avgSpeed > 100) {
+        riskScore += 35;
+        riskFactors.push(`🔴 Very high speed (${avgSpeed.toFixed(0)} km/h) - Severe impact risk`);
+    } else if (avgSpeed > 80) {
+        riskScore += 25;
+        riskFactors.push(`🟠 High speed (${avgSpeed.toFixed(0)} km/h) - Reduced reaction time`);
+    } else if (avgSpeed > 60) {
+        riskScore += 15;
+        riskFactors.push(`🟡 Moderate-high speed (${avgSpeed.toFixed(0)} km/h)`);
+    }
+    
+    // Time of day risk
+    if (timeOfDay === 'Night') {
+        riskScore += 35;
+        riskFactors.push(`🔴 Night travel - 3x higher fatality rate, reduced visibility`);
+    } else if (timeOfDay === 'Evening') {
+        riskScore += 20;
+        riskFactors.push(`🟠 Evening travel - Peak accident hours (5-9 PM)`);
+    } else if (timeOfDay === 'Afternoon') {
+        riskScore += 5;
+        riskFactors.push(`🟡 Afternoon travel - Moderate traffic`);
+    }
+    
+    // Vehicle type risk
+    if (vehicleType === 'Motorcycle') {
+        riskScore += 30;
+        riskFactors.push(`🔴 Motorcycle - Most vulnerable vehicle type`);
+    } else if (vehicleType === 'Goods vehicle') {
+        riskScore += 20;
+        riskFactors.push(`🟠 Heavy vehicle - Longer stopping distance, harder to maneuver`);
+    } else if (vehicleType === 'Bus') {
+        riskScore += 15;
+        riskFactors.push(`🟡 Bus - Many passengers at risk`);
+    }
+    
+    // Day of week risk (get current day)
+    const today = new Date().getDay();
+    const isWeekend = (today === 0 || today === 6);
+    if (isWeekend) {
+        riskScore += 20;
+        riskFactors.push(`🟠 Weekend travel - 35% higher accident rate`);
+    }
+    
+    // Determine risk level (LOWERED THRESHOLDS for HIGHER SENSITIVITY)
+    let riskLevel = "Low";
+    let alertNeeded = false;
+    
+    if (riskScore >= 50) {
+        riskLevel = "High";
+        alertNeeded = true;
+    } else if (riskScore >= 25) {
+        riskLevel = "Medium";
+        alertNeeded = false;
+    }
+    
+    // Call ML model for severity prediction
+    try {
+        const response = await fetch('/predict_route_risk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                day_of_week: isWeekend ? 'Saturday' : 'Monday',
+                light_conditions: timeOfDay === 'Night' ? 'Darkness - no lighting' : 'Daylight',
+                vehicle_type: vehicleType,
+                time_of_day: timeOfDay,
+                speed_limit: Math.round(avgSpeed),
+                area_type: distance > 100 ? 'Rural' : 'Urban',
+                weather: 'Fine no high winds',
+                road_surface: 'Dry',
+                vehicles: 2,
+                casualties: 1,
+                user_email: userEmail
+            })
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        
+        // Combine rule-based risk with ML prediction
+        if (data.severity === 'Serious' || data.severity === 'Fatal') {
+            riskLevel = "High";
+            alertNeeded = true;
         }
+        
+        return {
+            risk_level: riskLevel,
+            confidence: data.confidence || 85,
+            explanations: riskFactors,
+            recommendations: getRecommendations(riskLevel, vehicleType, timeOfDay),
+            alert_needed: alertNeeded,
+            distance: distance,
+            duration: duration,
+            avgSpeed: avgSpeed
+        };
+    } catch (error) {
+        console.error('ML error, using rule-based:', error);
+        return {
+            risk_level: riskLevel,
+            confidence: 75,
+            explanations: riskFactors,
+            recommendations: getRecommendations(riskLevel, vehicleType, timeOfDay),
+            alert_needed: alertNeeded,
+            distance: distance,
+            duration: duration,
+            avgSpeed: avgSpeed
+        };
+    }
+}
+
+function getRecommendations(riskLevel, vehicleType, timeOfDay) {
+    const recs = [];
+    
+    if (riskLevel === "High") {
+        recs.push("🚨 HIGH RISK - Strongly consider postponing or changing your route");
+        recs.push("⚠️ Reduce speed by 30% below the speed limit");
+        recs.push("🐌 Maintain 6+ seconds following distance");
+        recs.push("📞 Share your live location with family/friends");
+        recs.push("🔧 Check tire pressure, brakes, and lights before departure");
+    } else if (riskLevel === "Medium") {
+        recs.push("⚠️ Exercise caution throughout your journey");
+        recs.push("🛑 Take breaks every 2 hours to avoid fatigue");
+        recs.push("📱 Keep phone charged for emergencies");
+    } else {
+        recs.push("✅ Safe journey ahead! Continue following traffic rules");
+        recs.push("👍 Stay alert and avoid distractions");
+    }
+    
+    if (vehicleType === 'Motorcycle') {
+        recs.push("🪖 Wear full protective gear (helmet, jacket, gloves)");
+    }
+    
+    if (timeOfDay === 'Night') {
+        recs.push("💡 Use high beams when safe, watch for pedestrians and animals");
+    }
+    
+    return recs;
+}
         
         function displayRiskAssessment(risk) {
             const riskClass = risk.risk_level === 'High' ? 'risk-high' : (risk.risk_level === 'Medium' ? 'risk-medium' : 'risk-low');

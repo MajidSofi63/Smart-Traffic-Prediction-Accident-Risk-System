@@ -167,9 +167,9 @@ def generate_explanation(features_dict, prediction, confidence):
         'alert_needed': alert_needed
     }
 
-def send_email_alert_brevo(severity, confidence, explanations, user_email=None):
+def send_email_alert_brevo(severity, confidence, explanations, user_email=None, risk_level="MEDIUM"):
     """
-    Send email alert using Brevo API (300 free emails/day)
+    Send email alert using Brevo API for EVERY trip
     """
     # Skip if no email provided
     if not user_email:
@@ -191,8 +191,13 @@ def send_email_alert_brevo(severity, confidence, explanations, user_email=None):
             sib_api_v3_sdk.ApiClient(configuration)
         )
         
-        # Build email content
-        subject = f"🚨 HIGH RISK ALERT: {severity} Accident Predicted"
+        # Determine subject based on risk level
+        if risk_level == "HIGH":
+            subject = f"🚨 HIGH RISK ALERT: {severity} Accident Predicted on Your Trip"
+        elif risk_level == "MEDIUM":
+            subject = f"⚠️ MEDIUM RISK: {severity} Accident Possible on Your Trip"
+        else:
+            subject = f"✅ TRIP SUMMARY: {severity} Accident Risk Assessment"
         
         # Determine risk color
         if severity == "Fatal":
@@ -218,18 +223,25 @@ def send_email_alert_brevo(severity, confidence, explanations, user_email=None):
                 .footer {{ font-size: 12px; color: #666; text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; }}
                 ul {{ margin: 10px 0; padding-left: 20px; }}
                 li {{ margin: 8px 0; }}
+                .trip-details {{ background: #e3f2fd; padding: 15px; margin: 20px 0; border-radius: 5px; }}
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
                     <h2>🚗 Smart Traffic Prediction System</h2>
-                    <p>Accident Risk Alert</p>
+                    <p>Your Trip Risk Assessment</p>
                 </div>
                 
                 <div class="risk-box">
-                    <div class="risk-level">⚠️ {severity} Accident Risk</div>
+                    <div class="risk-level">⚠️ Predicted Outcome: {severity} Accident</div>
                     <p><strong>Confidence:</strong> {confidence}%</p>
+                    <p><strong>Risk Level:</strong> {risk_level}</p>
+                </div>
+                
+                <div class="trip-details">
+                    <h3>📋 Trip Summary</h3>
+                    <p>Based on your trip parameters, our AI model has analyzed the risk factors.</p>
                 </div>
                 
                 <div class="explanations">
@@ -247,10 +259,32 @@ def send_email_alert_brevo(severity, confidence, explanations, user_email=None):
                 <div class="recommendations">
                     <h3>💡 Safety Recommendations:</h3>
                     <ul>
-                        <li>🚨 Consider postponing or changing your route</li>
-                        <li>⚠️ Drive with extra caution and reduce speed</li>
-                        <li>🐌 Increase following distance to 4+ seconds</li>
+        """
+        
+        if risk_level == "HIGH":
+            html_content += """
+                        <li>🚨 HIGH RISK - Consider postponing or changing your route!</li>
+                        <li>⚠️ Drive with extreme caution and reduce speed by 30%</li>
+                        <li>🐌 Increase following distance to 6+ seconds</li>
                         <li>📞 Inform someone about your travel plans</li>
+                        <li>🔧 Check your vehicle before departure</li>
+            """
+        elif risk_level == "MEDIUM":
+            html_content += """
+                        <li>⚠️ MEDIUM RISK - Exercise caution on the road</li>
+                        <li>🚗 Avoid distractions while driving</li>
+                        <li>🛑 Take breaks every 2 hours for long journeys</li>
+                        <li>📱 Keep your phone charged for emergencies</li>
+            """
+        else:
+            html_content += """
+                        <li>✅ LOW RISK - Safe journey ahead!</li>
+                        <li>👍 Continue following traffic rules</li>
+                        <li>🔧 Ensure vehicle is in good condition</li>
+                        <li>😴 Get adequate rest before long drives</li>
+            """
+        
+        html_content += """
                     </ul>
                 </div>
                 
@@ -280,7 +314,7 @@ def send_email_alert_brevo(severity, confidence, explanations, user_email=None):
         
         # Send email
         api_response = api_instance.send_transac_email(send_smtp_email)
-        print(f"✅ Brevo alert sent successfully to {user_email}")
+        print(f"✅ Brevo alert sent successfully to {user_email} - Risk: {risk_level}")
         return True
         
     except ApiException as e:
@@ -381,30 +415,39 @@ def predict():
                              confidence=0,
                              error=f"Prediction error: {str(e)}")
 
-@app.route('/predict_route_risk', methods=['POST'])
-def predict_route_risk():
-    """Predict risk for a specific route segment"""
+@app.route('/predict', methods=['POST'])
+def predict():
+    if model is None:
+        return render_template('result.html', 
+                             severity="Error", 
+                             confidence=0,
+                             error="Model not loaded")
+    
     try:
-        data = request.json
+        # Get all form data
+        input_dict = {}
+        for feature in features:
+            value = request.form.get(feature)
+            if value is None or value == '':
+                return render_template('result.html', 
+                                     severity="Error", 
+                                     confidence=0,
+                                     error=f"Missing value for {feature}")
+            input_dict[feature] = value
         
-        input_data = {
-            'Day_of_Week': data.get('day_of_week', 'Monday'),
-            'Junction_Control': data.get('junction_control', 'Not at junction or within 20m'),
-            'Light_Conditions': data.get('light_conditions', 'Daylight'),
-            'Road_Surface_Conditions': data.get('road_surface', 'Dry'),
-            'Road_Type': data.get('road_type', 'Single carriageway'),
-            'Speed_limit': data.get('speed_limit', 50),
-            'Urban_or_Rural_Area': data.get('area_type', 'Urban'),
-            'Weather_Conditions': data.get('weather', 'Fine no high winds'),
-            'Number_of_Vehicles': data.get('vehicles', 2),
-            'Number_of_Casualties': data.get('casualties', 1)
-        }
+        # Get email for alerts
+        user_email = request.form.get('user_email', '')
         
-        # Get user email for alerts
-        user_email = data.get('user_email', '')
+        # Create dataframe
+        input_df = pd.DataFrame([input_dict])
         
-        input_df = pd.DataFrame([input_data])
+        # Convert numeric columns
+        numeric_cols = ['Speed_limit', 'Number_of_Vehicles', 'Number_of_Casualties']
+        for col in numeric_cols:
+            if col in input_df.columns:
+                input_df[col] = pd.to_numeric(input_df[col])
         
+        # Encode categorical variables
         for column in input_df.columns:
             if column in label_encoders:
                 le = label_encoders[column]
@@ -413,34 +456,41 @@ def predict_route_risk():
                 except:
                     input_df[column] = 0
         
+        # Make prediction
         prediction = model.predict(input_df)
         predicted_severity = target_encoder.inverse_transform(prediction)[0]
         
+        # Get confidence
         probabilities = model.predict_proba(input_df)[0]
         confidence = max(probabilities) * 100
         
-        explanation_data = generate_explanation(input_data, predicted_severity, confidence)
+        # Generate explanation
+        explanation_data = generate_explanation(input_dict, predicted_severity, confidence)
         
-        # Send alert if high risk
+        # ✅ FIX 1: Send email for EVERY trip (not just high risk)
         alert_sent = False
-        if explanation_data['alert_needed'] and predicted_severity in ['Serious', 'Fatal']:
+        if user_email:  # If user provided email, send alert for every trip
             alert_sent = send_email_alert(predicted_severity, confidence, 
-                                         explanation_data['explanations'], user_email)
+                                         explanation_data['explanations'], 
+                                         user_email,
+                                         risk_level=explanation_data['risk_level'])
         
-        return jsonify({
-            'severity': predicted_severity,
-            'confidence': round(confidence, 2),
-            'explanations': explanation_data['explanations'][:3],
-            'recommendations': explanation_data['recommendations'][:3],
-            'risk_level': explanation_data['risk_level'],
-            'risk_score': explanation_data['risk_score'],
-            'alert_needed': explanation_data['alert_needed'],
-            'alert_sent': alert_sent
-        })
-        
+        return render_template('result.html', 
+                             severity=predicted_severity,
+                             confidence=round(confidence, 2),
+                             explanations=explanation_data['explanations'],
+                             recommendations=explanation_data['recommendations'],
+                             risk_level=explanation_data['risk_level'],
+                             risk_score=explanation_data['risk_score'],
+                             alert_sent=alert_sent,
+                             error=None)
+    
     except Exception as e:
-        print(f"Route risk error: {str(e)}")
-        return jsonify({'severity': 'Unknown', 'confidence': 0, 'error': str(e)})
+        print(f"Prediction error: {str(e)}")
+        return render_template('result.html', 
+                             severity="Error", 
+                             confidence=0,
+                             error=str(e))
 
 @app.route('/geocode', methods=['GET', 'POST'])
 def geocode():
