@@ -19,7 +19,7 @@
             height: 100vh;
         }
         .sidebar {
-            width: 350px;
+            width: 380px;
             background: white;
             padding: 20px;
             box-shadow: 2px 0 10px rgba(0,0,0,0.1);
@@ -54,6 +54,9 @@
             border-radius: 5px;
             box-sizing: border-box;
         }
+        input {
+            background: white;
+        }
         button {
             width: 100%;
             padding: 10px;
@@ -67,6 +70,10 @@
         }
         button:hover {
             transform: translateY(-2px);
+        }
+        .search-btn {
+            background: #2196F3;
+            margin-top: 5px;
         }
         .risk-card {
             background: #f5f5f5;
@@ -109,6 +116,20 @@
             background: #e3f2fd;
             border-radius: 5px;
         }
+        .explanation-box {
+            margin: 10px 0;
+            padding: 10px;
+            background: #fff3e0;
+            border-radius: 5px;
+            font-size: 13px;
+        }
+        .explanation-box ul {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+        .explanation-box li {
+            margin: 5px 0;
+        }
         .status {
             background: #f0f0f0;
             padding: 10px;
@@ -123,6 +144,18 @@
         .current-location {
             background-color: #2196F3;
         }
+        .alert-banner {
+            background-color: #f44336;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            text-align: center;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0.7; }
+        }
     </style>
 </head>
 <body>
@@ -131,17 +164,28 @@
             <h2>🚗 Route Risk Predictor</h2>
             
             <div class="status" id="status">
-                💡 Click on map to set START point
+                💡 Type address OR click on map to set points
+            </div>
+            
+            <div id="alertBanner" style="display: none;" class="alert-banner">
+                🚨 HIGH RISK ALERT! Check recommendations below
             </div>
             
             <div class="form-group">
                 <label>📍 Start Point:</label>
-                <input type="text" id="start" placeholder="Click on map or enter address" readonly>
+                <input type="text" id="start" placeholder="Type address (e.g., New Delhi) OR click on map">
+                <button onclick="searchAddress('start')" class="search-btn">🔍 Search Start Address</button>
             </div>
             
             <div class="form-group">
                 <label>🏁 Destination:</label>
-                <input type="text" id="end" placeholder="Click on map or enter address" readonly>
+                <input type="text" id="end" placeholder="Type address (e.g., Mumbai) OR click on map">
+                <button onclick="searchAddress('end')" class="search-btn">🔍 Search Destination</button>
+            </div>
+            
+            <div class="form-group">
+                <label>📧 Email for Alerts (optional):</label>
+                <input type="email" id="user_email" placeholder="Enter email to receive alerts">
             </div>
             
             <div class="form-group">
@@ -167,14 +211,14 @@
             
             <button onclick="getCurrentLocation()" class="current-location">📍 Use My Current Location</button>
             <button onclick="calculateRoute()">🔍 Calculate Route & Risk</button>
-            <button onclick="resetSelection()" class="reset-btn">🔄 Reset Selection</button>
+            <button onclick="resetSelection()" class="reset-btn">🔄 Reset All</button>
             
             <div id="riskCard" class="risk-card">
                 <h3>⚠️ Route Risk Assessment</h3>
                 <div id="riskLevel" class="risk-level"></div>
                 <div id="routeInfo" class="route-info"></div>
-                <div id="riskFactors"></div>
-                <div id="recommendation"></div>
+                <div id="explanationBox" class="explanation-box"></div>
+                <div id="recommendationBox" class="explanation-box"></div>
             </div>
         </div>
         
@@ -192,20 +236,12 @@
         
         // Initialize map
         function initMap() {
-            // Create map centered on India
             map = L.map('map').setView([20.5937, 78.9629], 5);
-            
-            // Add tile layer
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors',
                 maxZoom: 19
             }).addTo(map);
-            
-            // Add click handler
             map.on('click', onMapClick);
-            
-            // Update status
-            document.getElementById('status').innerHTML = '💡 Click on map to set START point';
         }
         
         function onMapClick(e) {
@@ -214,48 +250,64 @@
             const coordString = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
             
             if (selectingStart) {
-                // Set start point
-                if (startMarker) {
-                    map.removeLayer(startMarker);
-                }
-                startMarker = L.marker([lat, lng], {
-                    icon: L.divIcon({
-                        html: '<div style="background-color: #4CAF50; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>',
-                        iconSize: [24, 24],
-                        className: 'custom-marker'
-                    })
-                }).addTo(map);
-                startMarker.bindPopup('Start Point').openPopup();
-                
-                document.getElementById('start').value = coordString;
-                document.getElementById('status').innerHTML = '✅ Start point set! Now click on map to set DESTINATION';
+                setStartPoint(lat, lng, coordString);
                 selectingStart = false;
+                document.getElementById('status').innerHTML = '✅ Start set! Now click map for DESTINATION OR type below';
             } else {
-                // Set end point
-                if (endMarker) {
-                    map.removeLayer(endMarker);
-                }
-                endMarker = L.marker([lat, lng], {
-                    icon: L.divIcon({
-                        html: '<div style="background-color: #f44336; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>',
-                        iconSize: [24, 24],
-                        className: 'custom-marker'
-                    })
-                }).addTo(map);
-                endMarker.bindPopup('Destination').openPopup();
-                
-                document.getElementById('end').value = coordString;
-                document.getElementById('status').innerHTML = '✅ Destination set! Click "Calculate Route & Risk" to see the route';
+                setEndPoint(lat, lng, coordString);
                 selectingStart = true;
+                document.getElementById('status').innerHTML = '✅ Both points set! Click "Calculate Route"';
+            }
+        }
+        
+        function setStartPoint(lat, lng, coordString) {
+            if (startMarker) map.removeLayer(startMarker);
+            startMarker = L.marker([lat, lng]).addTo(map);
+            startMarker.bindPopup('Start Point').openPopup();
+            document.getElementById('start').value = coordString;
+        }
+        
+        function setEndPoint(lat, lng, coordString) {
+            if (endMarker) map.removeLayer(endMarker);
+            endMarker = L.marker([lat, lng]).addTo(map);
+            endMarker.bindPopup('Destination').openPopup();
+            document.getElementById('end').value = coordString;
+            
+            if (startMarker && endMarker) {
+                const bounds = L.latLngBounds([startMarker.getLatLng(), endMarker.getLatLng()]);
+                map.fitBounds(bounds, { padding: [50, 50] });
+            }
+        }
+        
+        async function searchAddress(pointType) {
+            const address = document.getElementById(pointType).value;
+            if (!address) {
+                alert("Please enter an address");
+                return;
+            }
+            
+            document.getElementById('status').innerHTML = '🔍 Searching for address...';
+            
+            try {
+                const response = await fetch(`/geocode?address=${encodeURIComponent(address)}`);
+                const data = await response.json();
                 
-                // Auto-zoom to show both points
-                if (startMarker && endMarker) {
-                    const bounds = L.latLngBounds([
-                        startMarker.getLatLng(),
-                        endMarker.getLatLng()
-                    ]);
-                    map.fitBounds(bounds, { padding: [50, 50] });
+                if (data.error) {
+                    alert("Address not found: " + data.error);
+                    return;
                 }
+                
+                if (pointType === 'start') {
+                    setStartPoint(data.lat, data.lon, address);
+                    selectingStart = false;
+                    document.getElementById('status').innerHTML = '✅ Start set! Now set destination';
+                } else {
+                    setEndPoint(data.lat, data.lon, address);
+                    selectingStart = true;
+                    document.getElementById('status').innerHTML = '✅ Both points set! Click "Calculate Route"';
+                }
+            } catch (error) {
+                alert("Error searching address: " + error.message);
             }
         }
         
@@ -265,23 +317,9 @@
                     function(position) {
                         const lat = position.coords.latitude;
                         const lng = position.coords.longitude;
-                        const coordString = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-                        
-                        if (startMarker) {
-                            map.removeLayer(startMarker);
-                        }
-                        startMarker = L.marker([lat, lng], {
-                            icon: L.divIcon({
-                                html: '<div style="background-color: #4CAF50; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>',
-                                iconSize: [24, 24],
-                                className: 'custom-marker'
-                            })
-                        }).addTo(map);
-                        startMarker.bindPopup('Your Location').openPopup();
-                        
-                        document.getElementById('start').value = coordString;
-                        document.getElementById('status').innerHTML = '✅ Start point set! Now click on map to set DESTINATION';
+                        setStartPoint(lat, lng, "My Location");
                         selectingStart = false;
+                        document.getElementById('status').innerHTML = '✅ Current location set as start! Now set destination';
                         map.setView([lat, lng], 13);
                     },
                     function(error) {
@@ -289,7 +327,7 @@
                     }
                 );
             } else {
-                alert("Geolocation not supported by your browser");
+                alert("Geolocation not supported");
             }
         }
         
@@ -297,60 +335,76 @@
             if (startMarker) map.removeLayer(startMarker);
             if (endMarker) map.removeLayer(endMarker);
             if (routeLayer) map.removeLayer(routeLayer);
-            
             startMarker = null;
             endMarker = null;
             routeLayer = null;
             selectingStart = true;
-            
             document.getElementById('start').value = '';
             document.getElementById('end').value = '';
             document.getElementById('riskCard').classList.remove('show');
-            document.getElementById('status').innerHTML = '💡 Click on map to set START point';
-            
+            document.getElementById('alertBanner').style.display = 'none';
+            document.getElementById('status').innerHTML = '💡 Type address OR click on map to set points';
             map.setView([20.5937, 78.9629], 5);
         }
         
         async function calculateRoute() {
             const start = document.getElementById('start').value;
             const end = document.getElementById('end').value;
+            const userEmail = document.getElementById('user_email').value;
             
             if (!start || !end) {
                 alert("Please set both start and destination points");
                 return;
             }
             
-            // Show loading
             document.getElementById('riskCard').classList.add('show');
-            document.getElementById('riskLevel').innerHTML = "Calculating route...";
-            document.getElementById('riskLevel').className = "risk-level";
+            document.getElementById('riskLevel').innerHTML = "🔄 Calculating route...";
             
             try {
-                // Parse coordinates
-                const startParts = start.split(',').map(Number);
-                const endParts = end.split(',').map(Number);
+                let startCoords, endCoords;
                 
-                const startCoords = { lat: startParts[0], lng: startParts[1] };
-                const endCoords = { lat: endParts[0], lng: endParts[1] };
+                if (start.includes(',')) {
+                    const parts = start.split(',').map(Number);
+                    startCoords = { lat: parts[0], lng: parts[1] };
+                } else {
+                    const geoResp = await fetch(`/geocode?address=${encodeURIComponent(start)}`);
+                    const geoData = await geoResp.json();
+                    if (geoData.error) throw new Error("Start address not found");
+                    startCoords = { lat: geoData.lat, lng: geoData.lon };
+                }
                 
-                // Get route
+                if (end.includes(',')) {
+                    const parts = end.split(',').map(Number);
+                    endCoords = { lat: parts[0], lng: parts[1] };
+                } else {
+                    const geoResp = await fetch(`/geocode?address=${encodeURIComponent(end)}`);
+                    const geoData = await geoResp.json();
+                    if (geoData.error) throw new Error("Destination address not found");
+                    endCoords = { lat: geoData.lat, lng: geoData.lon };
+                }
+                
                 const route = await getRoute(startCoords, endCoords);
-                
-                // Display route
                 displayRoute(route, startCoords, endCoords);
                 
-                // Calculate risk
                 const vehicleType = document.getElementById('vehicle_type').value;
                 const timeOfDay = document.getElementById('time_of_day').value;
-                const risk = calculateRiskScore(route, vehicleType, timeOfDay);
                 
-                // Display risk assessment
+                const risk = await calculateRiskWithML(route, vehicleType, timeOfDay, userEmail);
                 displayRiskAssessment(risk);
+                
+                if (risk.risk_level === 'High' && risk.alert_needed) {
+                    document.getElementById('alertBanner').style.display = 'block';
+                    showBrowserNotification(risk);
+                    if (userEmail) {
+                        document.getElementById('status').innerHTML = '📧 Alert email sent to ' + userEmail;
+                    }
+                } else {
+                    document.getElementById('alertBanner').style.display = 'none';
+                }
                 
             } catch (error) {
                 console.error(error);
                 document.getElementById('riskLevel').innerHTML = "Error calculating route";
-                document.getElementById('riskLevel').className = "risk-level risk-high";
                 alert("Error: " + error.message);
             }
         }
@@ -359,11 +413,7 @@
             const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
             const response = await fetch(url);
             const data = await response.json();
-            
-            if (data.code !== 'Ok') {
-                throw new Error("Route not found");
-            }
-            
+            if (data.code !== 'Ok') throw new Error("Route not found");
             return {
                 distance: data.routes[0].distance / 1000,
                 duration: data.routes[0].duration / 60,
@@ -372,89 +422,80 @@
         }
         
         function displayRoute(route, start, end) {
-            // Remove old route
-            if (routeLayer) {
-                map.removeLayer(routeLayer);
-            }
-            
-            // Add new route
+            if (routeLayer) map.removeLayer(routeLayer);
             routeLayer = L.geoJSON(route.geometry, {
                 style: { color: '#2196F3', weight: 5, opacity: 0.8 }
             }).addTo(map);
-            
-            // Fit bounds
-            const bounds = L.latLngBounds([
-                [start.lat, start.lng],
-                [end.lat, end.lng]
-            ]);
+            const bounds = L.latLngBounds([[start.lat, start.lng], [end.lat, end.lng]]);
             map.fitBounds(bounds, { padding: [50, 50] });
         }
         
-        function calculateRiskScore(route, vehicleType, timeOfDay) {
+        async function calculateRiskWithML(route, vehicleType, timeOfDay, userEmail) {
             const distance = route.distance;
             const duration = route.duration;
             const avgSpeed = distance / (duration / 60);
             
-            let riskScore = 0;
-            let riskFactors = [];
+            const dayMap = {'Morning': 'Monday', 'Afternoon': 'Tuesday', 'Evening': 'Friday', 'Night': 'Saturday'};
+            const lightMap = {'Morning': 'Daylight', 'Afternoon': 'Daylight', 'Evening': 'Darkness - lights lit', 'Night': 'Darkness - no lighting'};
             
-            if (distance > 500) {
-                riskScore += 30;
-                riskFactors.push("⚠️ Long distance route (>500km)");
-            } else if (distance > 200) {
-                riskScore += 15;
-                riskFactors.push("📏 Moderate distance route");
+            try {
+                const response = await fetch('/predict_route_risk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        day_of_week: dayMap[timeOfDay],
+                        light_conditions: lightMap[timeOfDay],
+                        vehicle_type: vehicleType,
+                        time_of_day: timeOfDay,
+                        speed_limit: Math.round(avgSpeed),
+                        area_type: distance > 100 ? 'Rural' : 'Urban',
+                        weather: 'Fine no high winds',
+                        road_surface: 'Dry',
+                        vehicles: 2,
+                        casualties: 1,
+                        user_email: userEmail
+                    })
+                });
+                const data = await response.json();
+                return {
+                    risk_level: data.severity === 'Fatal' || data.severity === 'Serious' ? 'High' : (data.severity === 'Slight' ? 'Low' : 'Medium'),
+                    confidence: data.confidence,
+                    explanations: data.explanations || [],
+                    recommendations: data.recommendations || [],
+                    alert_needed: data.alert_needed || false,
+                    distance: distance,
+                    duration: duration,
+                    avgSpeed: avgSpeed
+                };
+            } catch (error) {
+                let riskScore = 0;
+                if (distance > 500) riskScore += 30;
+                if (avgSpeed > 100) riskScore += 25;
+                if (timeOfDay === 'Night') riskScore += 25;
+                if (vehicleType === 'Motorcycle') riskScore += 15;
+                
+                let riskLevel = "Low";
+                if (riskScore >= 50) riskLevel = "High";
+                else if (riskScore >= 25) riskLevel = "Medium";
+                
+                return {
+                    risk_level: riskLevel,
+                    confidence: 85,
+                    explanations: [`Distance: ${distance.toFixed(0)} km`, `Speed: ${avgSpeed.toFixed(0)} km/h`, `Time: ${timeOfDay}`],
+                    recommendations: ["Drive cautiously", "Take regular breaks"],
+                    alert_needed: riskLevel === "High",
+                    distance: distance,
+                    duration: duration,
+                    avgSpeed: avgSpeed
+                };
             }
-            
-            if (avgSpeed > 100) {
-                riskScore += 25;
-                riskFactors.push("🏁 High average speed (>100 km/h)");
-            } else if (avgSpeed > 80) {
-                riskScore += 15;
-                riskFactors.push("⚡ Moderate to high speed");
-            }
-            
-            if (timeOfDay === 'Night') {
-                riskScore += 25;
-                riskFactors.push("🌙 Night travel (reduced visibility)");
-            } else if (timeOfDay === 'Evening') {
-                riskScore += 10;
-                riskFactors.push("🌆 Evening travel (peak accident hours)");
-            }
-            
-            if (vehicleType === 'Motorcycle') {
-                riskScore += 15;
-                riskFactors.push("🏍️ Motorcycle (higher vulnerability)");
-            } else if (vehicleType === 'Goods vehicle') {
-                riskScore += 10;
-                riskFactors.push("🚛 Heavy vehicle (longer stopping distance)");
-            }
-            
-            let riskLevel = "Low";
-            let riskColor = "risk-low";
-            if (riskScore >= 50) {
-                riskLevel = "High";
-                riskColor = "risk-high";
-            } else if (riskScore >= 25) {
-                riskLevel = "Medium";
-                riskColor = "risk-medium";
-            }
-            
-            return {
-                riskLevel: riskLevel,
-                riskScore: riskScore,
-                riskColor: riskColor,
-                riskFactors: riskFactors,
-                distance: distance,
-                duration: duration,
-                avgSpeed: avgSpeed
-            };
         }
         
         function displayRiskAssessment(risk) {
             const riskLevelDiv = document.getElementById('riskLevel');
-            riskLevelDiv.innerHTML = risk.riskLevel + " Risk";
-            riskLevelDiv.className = "risk-level " + risk.riskColor;
+            const riskClass = risk.risk_level === 'High' ? 'risk-high' : (risk.risk_level === 'Medium' ? 'risk-medium' : 'risk-low');
+            riskLevelDiv.innerHTML = `${risk.risk_level} RISK (${risk.confidence}% confidence)`;
+            riskLevelDiv.className = `risk-level ${riskClass}`;
             
             document.getElementById('routeInfo').innerHTML = `
                 📍 Distance: ${risk.distance.toFixed(1)} km<br>
@@ -462,25 +503,57 @@
                 🚗 Average Speed: ${risk.avgSpeed.toFixed(0)} km/h
             `;
             
-            let riskFactorsHtml = "<strong>Risk Factors:</strong><ul>";
-            risk.riskFactors.forEach(factor => {
-                riskFactorsHtml += `<li>${factor}</li>`;
-            });
-            riskFactorsHtml += "</ul>";
-            document.getElementById('riskFactors').innerHTML = riskFactorsHtml;
-            
-            let recommendation = "";
-            if (risk.riskLevel === "High") {
-                recommendation = "🚨 HIGH RISK: Consider alternative route, travel during daytime, reduce speed, and stay alert!";
-            } else if (risk.riskLevel === "Medium") {
-                recommendation = "⚠️ MEDIUM RISK: Exercise caution, follow traffic rules, and avoid distractions.";
+            let explanationHtml = "<strong>🔍 Why this risk level?</strong><ul>";
+            if (risk.explanations && risk.explanations.length > 0) {
+                risk.explanations.forEach(exp => {
+                    explanationHtml += `<li>${exp}</li>`;
+                });
             } else {
-                recommendation = "✅ LOW RISK: Safe journey! Continue following traffic regulations.";
+                explanationHtml += "<li>Route distance and speed factors considered</li>";
+                explanationHtml += `<li>${risk.distance > 200 ? 'Long distance increases fatigue risk' : 'Moderate distance route'}</li>`;
+                explanationHtml += `<li>${risk.avgSpeed > 80 ? 'High speed increases accident severity' : 'Moderate speed maintained'}</li>`;
             }
-            document.getElementById('recommendation').innerHTML = `<strong>💡 Recommendation:</strong><br>${recommendation}`;
+            explanationHtml += "</ul>";
+            document.getElementById('explanationBox').innerHTML = explanationHtml;
+            
+            let recommendationHtml = "<strong>💡 Safety Recommendations:</strong><ul>";
+            if (risk.recommendations && risk.recommendations.length > 0) {
+                risk.recommendations.forEach(rec => {
+                    recommendationHtml += `<li>${rec}</li>`;
+                });
+            } else {
+                if (risk.risk_level === 'High') {
+                    recommendationHtml += "<li>🚨 Consider postponing or changing your route</li>";
+                    recommendationHtml += "<li>⚠️ Drive with extreme caution, reduce speed by 30%</li>";
+                    recommendationHtml += "<li>📞 Inform someone about your travel plans</li>";
+                } else if (risk.risk_level === 'Medium') {
+                    recommendationHtml += "<li>⚠️ Exercise caution, avoid distractions</li>";
+                    recommendationHtml += "<li>🛑 Take breaks every 2 hours for long journeys</li>";
+                } else {
+                    recommendationHtml += "<li>✅ Safe journey! Continue following traffic rules</li>";
+                    recommendationHtml += "<li>🔧 Ensure vehicle is in good condition</li>";
+                }
+            }
+            recommendationHtml += "</ul>";
+            document.getElementById('recommendationBox').innerHTML = recommendationHtml;
         }
         
-        // Initialize map when page loads
+        function showBrowserNotification(risk) {
+            if (Notification.permission === "granted") {
+                new Notification("🚨 HIGH RISK ALERT", {
+                    body: `Route risk: ${risk.risk_level}. ${risk.explanations ? risk.explanations[0] : 'Please drive with extreme caution!'}`,
+                    icon: "https://cdn-icons-png.flaticon.com/512/179/179386.png"
+                });
+            } else if (Notification.permission !== "denied") {
+                Notification.requestPermission();
+            }
+        }
+        
+        // Request notification permission
+        if (Notification.permission === "default") {
+            Notification.requestPermission();
+        }
+        
         window.addEventListener('load', initMap);
     </script>
 </body>
