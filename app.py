@@ -21,7 +21,7 @@ features = None
 # Brevo Configuration (300 free emails/day)
 # Get your free API key from: https://www.brevo.com
 BREVO_CONFIG = {
-    'api_key': os.environ.get('BREVO_API_KEY', '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'),
+    'api_key': os.environ.get('BREVO_API_KEY'),  # Reads from environment
     'sender_email': os.environ.get('BREVO_SENDER_EMAIL', 'majidsofi63@gmail.com'),
     'sender_name': 'Smart Traffic Prediction System'
 }
@@ -31,9 +31,13 @@ def load_models():
     global model, label_encoders, target_encoder, features
     
     try:
+        import os
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Files in model directory: {os.listdir('model') if os.path.exists('model') else 'model folder not found'}")
+        
         print("Loading model...")
         model = joblib.load('model/traffic_model.pkl')
-        print("✓ Model loaded")
+        print("✓ Model loaded - type:", type(model))
         
         print("Loading encoders...")
         label_encoders = joblib.load('model/label_encoders.pkl')
@@ -46,6 +50,8 @@ def load_models():
         return True
     except Exception as e:
         print(f"✗ Error loading models: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def generate_explanation(features_dict, prediction, confidence):
