@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import joblib
 import os
+import sys
 import requests
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
@@ -21,19 +22,21 @@ features = None
 # Brevo Configuration (300 free emails/day)
 # Get your free API key from: https://www.brevo.com
 BREVO_CONFIG = {
-    'api_key': os.environ.get('BREVO_API_KEY'),  # Reads from environment
+    'api_key': os.environ.get('BREVO_API_KEY'),  # Read from environment variable
     'sender_email': os.environ.get('BREVO_SENDER_EMAIL', 'majidsofi63@gmail.com'),
     'sender_name': 'Smart Traffic Prediction System'
 }
 
 def load_models():
-    """Load models with error handling"""
+    """Load models with error handling and detailed logging"""
     global model, label_encoders, target_encoder, features
     
     try:
-        import os
         print(f"Current working directory: {os.getcwd()}")
-        print(f"Files in model directory: {os.listdir('model') if os.path.exists('model') else 'model folder not found'}")
+        print(f"Model directory exists: {os.path.exists('model')}")
+        
+        if os.path.exists('model'):
+            print(f"Files in model directory: {os.listdir('model')}")
         
         print("Loading model...")
         model = joblib.load('model/traffic_model.pkl')
@@ -69,9 +72,6 @@ def generate_explanation(features_dict, prediction, confidence):
         explanations.append("📅 Friday evening - Peak accident time due to end-of-week rush")
         risk_score += 15
         recommendations.append("Avoid peak hours (5-7 PM) on Fridays")
-    else:
-        explanations.append(f"📅 {features_dict['Day_of_Week']} - Weekday travel has lower accident rates")
-        recommendations.append("Maintain regular safety practices")
     
     # Speed limit analysis
     speed = int(features_dict['Speed_limit'])
@@ -83,9 +83,6 @@ def generate_explanation(features_dict, prediction, confidence):
         explanations.append(f"⚡ Moderate speed limit ({speed} mph) - Still requires caution")
         risk_score += 10
         recommendations.append("Maintain safe following distance")
-    else:
-        explanations.append(f"🐌 Low speed limit ({speed} mph) - Safer speed zone")
-        recommendations.append("Continue maintaining safe speed")
     
     # Weather analysis
     weather = features_dict['Weather_Conditions']
@@ -97,9 +94,6 @@ def generate_explanation(features_dict, prediction, confidence):
         explanations.append(f"🌫️ Foggy conditions - Visibility reduced to less than 100 meters")
         risk_score += 30
         recommendations.append("Use fog lights, avoid sudden braking")
-    else:
-        explanations.append(f"☀️ Good weather ({weather}) - Favorable driving conditions")
-        recommendations.append("Enjoy safe driving conditions")
     
     # Light conditions analysis
     light = features_dict['Light_Conditions']
@@ -112,9 +106,6 @@ def generate_explanation(features_dict, prediction, confidence):
             explanations.append("🌃 Night travel - Reduced visibility, higher accident rates")
             risk_score += 20
             recommendations.append("Be extra cautious, watch for pedestrians and animals")
-    else:
-        explanations.append("☀️ Daylight travel - Optimal visibility conditions")
-        recommendations.append("Good visibility, maintain standard precautions")
     
     # Vehicle analysis
     vehicles = int(features_dict['Number_of_Vehicles'])
@@ -125,10 +116,6 @@ def generate_explanation(features_dict, prediction, confidence):
     elif vehicles > 2:
         explanations.append(f"🚙 Multiple vehicles involved ({vehicles}) - Increased collision probability")
         risk_score += 10
-        recommendations.append("Stay alert, watch surrounding traffic")
-    else:
-        explanations.append(f"🚘 Single vehicle involvement ({vehicles}) - Lower collision complexity")
-        recommendations.append("Focus on road and driving conditions")
     
     # Casualties analysis
     casualties = int(features_dict['Number_of_Casualties'])
@@ -136,9 +123,6 @@ def generate_explanation(features_dict, prediction, confidence):
         explanations.append(f"⚠️ High casualty potential ({casualties} people) - Severe accident scenario")
         risk_score += 20
         recommendations.append("Ensure all passengers wear seatbelts/helmets")
-    elif casualties > 0:
-        explanations.append(f"👥 Casualties possible ({casualties} people) - Moderate severity potential")
-        recommendations.append("Drive defensively, protect all occupants")
     
     # Road surface analysis
     surface = features_dict['Road_Surface_Conditions']
@@ -146,9 +130,6 @@ def generate_explanation(features_dict, prediction, confidence):
         explanations.append(f"⚠️ Slippery road surface ({surface}) - Increased stopping distance, risk of skidding")
         risk_score += 20
         recommendations.append("Reduce speed by 30% on slippery roads")
-    else:
-        explanations.append(f"✅ Good road surface ({surface}) - Proper traction available")
-        recommendations.append("Normal driving conditions")
     
     # Area analysis
     area = features_dict['Urban_or_Rural_Area']
@@ -156,9 +137,6 @@ def generate_explanation(features_dict, prediction, confidence):
         explanations.append("🏞️ Rural area - Higher speeds, less lighting, slower emergency response")
         risk_score += 15
         recommendations.append("Be aware of sharp curves, animals on road")
-    else:
-        explanations.append("🏙️ Urban area - Lower speeds, better lighting, faster emergency response")
-        recommendations.append("Watch for pedestrians, cyclists, and intersections")
     
     # Junction analysis
     junction = features_dict['Junction_Control']
@@ -166,10 +144,6 @@ def generate_explanation(features_dict, prediction, confidence):
         explanations.append("🚦 Signal-controlled junction - Higher accident concentration at intersections")
         risk_score += 10
         recommendations.append("Be cautious at intersections, don't rush yellow lights")
-    elif 'Give way' in junction:
-        explanations.append("🛑 Give way junction - Right-of-way confusion possible")
-        risk_score += 5
-        recommendations.append("Always yield properly at junctions")
     
     # Determine risk level
     if risk_score >= 60:
@@ -196,7 +170,6 @@ def generate_explanation(features_dict, prediction, confidence):
 def send_email_alert_brevo(severity, confidence, explanations, user_email=None):
     """
     Send email alert using Brevo API (300 free emails/day)
-    This is the recommended email service for production use
     """
     # Skip if no email provided
     if not user_email:
@@ -204,9 +177,8 @@ def send_email_alert_brevo(severity, confidence, explanations, user_email=None):
         return False
     
     # Check if Brevo is configured
-    if BREVO_CONFIG['api_key'] == 'your_brevo_api_key_here':
-        print("⚠️ Brevo not configured. Get a free API key from https://www.brevo.com")
-        print("   Then set BREVO_API_KEY environment variable")
+    if not BREVO_CONFIG['api_key'] or BREVO_CONFIG['api_key'] == 'your_brevo_api_key_here':
+        print("⚠️ Brevo not configured. Set BREVO_API_KEY environment variable.")
         return False
     
     try:
@@ -246,7 +218,6 @@ def send_email_alert_brevo(severity, confidence, explanations, user_email=None):
                 .footer {{ font-size: 12px; color: #666; text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; }}
                 ul {{ margin: 10px 0; padding-left: 20px; }}
                 li {{ margin: 8px 0; }}
-                .badge {{ display: inline-block; background: {risk_color}; color: white; padding: 5px 10px; border-radius: 20px; font-size: 12px; }}
             </style>
         </head>
         <body>
@@ -259,7 +230,6 @@ def send_email_alert_brevo(severity, confidence, explanations, user_email=None):
                 <div class="risk-box">
                     <div class="risk-level">⚠️ {severity} Accident Risk</div>
                     <p><strong>Confidence:</strong> {confidence}%</p>
-                    <p><span class="badge">High Priority Alert</span></p>
                 </div>
                 
                 <div class="explanations">
@@ -267,7 +237,7 @@ def send_email_alert_brevo(severity, confidence, explanations, user_email=None):
                     <ul>
         """
         
-        for exp in explanations[:6]:
+        for exp in explanations[:5]:
             html_content += f"<li>{exp}</li>"
         
         html_content += """
@@ -279,7 +249,6 @@ def send_email_alert_brevo(severity, confidence, explanations, user_email=None):
                     <ul>
                         <li>🚨 Consider postponing or changing your route</li>
                         <li>⚠️ Drive with extra caution and reduce speed</li>
-                        <li>🛡️ Ensure all safety measures are followed</li>
                         <li>🐌 Increase following distance to 4+ seconds</li>
                         <li>📞 Inform someone about your travel plans</li>
                     </ul>
@@ -287,7 +256,6 @@ def send_email_alert_brevo(severity, confidence, explanations, user_email=None):
                 
                 <div class="footer">
                     <p>This is an automated alert from Smart Traffic Prediction System.</p>
-                    <p>Powered by Brevo - 300 free emails/day</p>
                     <p>Stay safe! 🚗</p>
                 </div>
             </div>
@@ -313,13 +281,10 @@ def send_email_alert_brevo(severity, confidence, explanations, user_email=None):
         # Send email
         api_response = api_instance.send_transac_email(send_smtp_email)
         print(f"✅ Brevo alert sent successfully to {user_email}")
-        print(f"   Message ID: {api_response.message_id}")
         return True
         
     except ApiException as e:
         print(f"❌ Brevo API error: {e}")
-        print(f"   Status code: {e.status}")
-        print(f"   Reason: {e.reason}")
         return False
     except Exception as e:
         print(f"❌ Email error: {e}")
@@ -327,6 +292,10 @@ def send_email_alert_brevo(severity, confidence, explanations, user_email=None):
 
 # Use Brevo as the primary email service
 send_email_alert = send_email_alert_brevo
+
+# Load models when the app starts
+with app.app_context():
+    load_models()
 
 @app.route('/')
 def home():
@@ -418,14 +387,10 @@ def predict_route_risk():
     try:
         data = request.json
         
-        # Get day of week based on time if not provided
-        day_of_week = data.get('day_of_week', 'Monday')
-        light_conditions = data.get('light_conditions', 'Daylight')
-        
         input_data = {
-            'Day_of_Week': day_of_week,
+            'Day_of_Week': data.get('day_of_week', 'Monday'),
             'Junction_Control': data.get('junction_control', 'Not at junction or within 20m'),
-            'Light_Conditions': light_conditions,
+            'Light_Conditions': data.get('light_conditions', 'Daylight'),
             'Road_Surface_Conditions': data.get('road_surface', 'Dry'),
             'Road_Type': data.get('road_type', 'Single carriageway'),
             'Speed_limit': data.get('speed_limit', 50),
@@ -480,26 +445,50 @@ def predict_route_risk():
 @app.route('/geocode', methods=['GET', 'POST'])
 def geocode():
     """Geocode an address to coordinates (supports manual input)"""
-    address = request.args.get('address') or request.json.get('address') if request.json else None
-    
-    if not address:
-        return jsonify({'error': 'No address provided'})
-    
-    url = f"https://nominatim.openstreetmap.org/search?format=json&q={address}&limit=1"
     try:
-        response = requests.get(url, headers={'User-Agent': 'TrafficRiskApp/1.0'})
+        # Get address from GET or POST
+        if request.method == 'POST':
+            data = request.get_json()
+            address = data.get('address') if data else None
+        else:
+            address = request.args.get('address')
+        
+        if not address:
+            return jsonify({'error': 'No address provided'}), 400
+        
+        print(f"Geocoding address: {address}")
+        
+        # Use Nominatim API with proper headers
+        url = f"https://nominatim.openstreetmap.org/search?format=json&q={address}&limit=1"
+        
+        headers = {
+            'User-Agent': 'SmartTrafficPrediction/1.0'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code != 200:
+            print(f"Geocoding API error: {response.status_code}")
+            return jsonify({'error': 'Geocoding service error'}), 500
+        
         data = response.json()
         
-        if data:
-            return jsonify({
+        if data and len(data) > 0:
+            result = {
                 'lat': float(data[0]['lat']),
                 'lon': float(data[0]['lon']),
                 'display_name': data[0]['display_name']
-            })
+            }
+            print(f"Geocoding success: {result}")
+            return jsonify(result)
+        else:
+            return jsonify({'error': f'Address not found: {address}'}), 404
+            
+    except requests.exceptions.Timeout:
+        return jsonify({'error': 'Geocoding service timeout'}), 504
     except Exception as e:
-        return jsonify({'error': str(e)})
-    
-    return jsonify({'error': 'Location not found'})
+        print(f"Geocoding error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/health')
 def health_check():
@@ -507,9 +496,24 @@ def health_check():
     return jsonify({
         "status": "healthy", 
         "models_loaded": model is not None,
-        "email_service": "Brevo (300 free emails/day)",
-        "features": features
+        "features": features,
+        "email_service": "Brevo (300 free emails/day)"
     })
+
+@app.route('/debug_model')
+def debug_model():
+    """Debug model loading"""
+    import os
+    debug_info = {
+        'cwd': os.getcwd(),
+        'model_dir_exists': os.path.exists('model'),
+        'model_files': os.listdir('model') if os.path.exists('model') else [],
+        'model_loaded': model is not None,
+        'features': features,
+        'python_version': sys.version,
+        'joblib_version': joblib.__version__
+    }
+    return jsonify(debug_info)
 
 @app.route('/debug')
 def debug():
@@ -523,7 +527,7 @@ def debug():
         "target_classes": target_encoder.classes_.tolist(),
         "email_config": {
             "service": "Brevo",
-            "configured": BREVO_CONFIG['api_key'] != 'your_brevo_api_key_here',
+            "configured": BREVO_CONFIG['api_key'] is not None,
             "free_emails_per_day": 300
         }
     }
@@ -537,11 +541,5 @@ def debug():
     return jsonify(debug_info)
 
 if __name__ == '__main__':
-    # Load models before starting
-    load_models()
-    
-    # Get port from environment variable
     port = int(os.environ.get('PORT', 10000))
-    
-    # Run the app (debug=False for production)
     app.run(host='0.0.0.0', port=port, debug=False)
