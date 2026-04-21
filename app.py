@@ -194,6 +194,16 @@ def api_route():
         'risk': risk,
         'email_sent': email_sent
     })
+@app.route('/geocode', methods=['POST'])
+def geocode_endpoint():
+    data = request.json
+    address = data.get('address')
+    if not address:
+        return jsonify({'error': 'No address'}), 400
+    coords = geocode(address)  # uses TomTom
+    if coords:
+        return jsonify({'lat': coords['lat'], 'lon': coords['lon']})
+    return jsonify({'error': 'Location not found'}), 404
 
 @app.route('/health')
 def health():
