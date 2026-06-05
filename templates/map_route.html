@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Route Risk Predictor</title>
+    <title>Route Risk Predictor – Live Traffic & Weather</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Leaflet core + heatmap plugin -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
@@ -12,22 +11,17 @@
         * { box-sizing: border-box; }
         body { margin: 0; font-family: 'Segoe UI', Roboto, Arial, sans-serif; background: #f0f2f5; }
         .app-container { display: flex; height: 100vh; }
-        /* Sidebar */
         .sidebar {
-            width: 400px;
+            width: 420px;
             background: white;
             padding: 20px;
             box-shadow: 2px 0 12px rgba(0,0,0,0.1);
             overflow-y: auto;
             z-index: 10;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
         }
         .map-container { flex: 1; position: relative; }
         #map { height: 100%; width: 100%; }
-        h2 { color: #1e3a8a; margin: 0 0 8px 0; display: flex; align-items: center; gap: 8px; }
-        .badge { font-size: 12px; background: #e2e8f0; padding: 2px 8px; border-radius: 20px; font-weight: normal; }
+        h2 { color: #1e3a8a; margin: 0 0 8px 0; }
         .form-group { margin-bottom: 12px; }
         label { font-weight: 600; font-size: 13px; color: #334155; display: block; margin-bottom: 4px; }
         input, select {
@@ -37,9 +31,7 @@
             border-radius: 12px;
             font-size: 14px;
             background: white;
-            transition: 0.2s;
         }
-        input:focus, select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
         button {
             width: 100%;
             padding: 10px;
@@ -48,26 +40,22 @@
             border-radius: 40px;
             color: white;
             font-weight: bold;
-            font-size: 14px;
             cursor: pointer;
-            transition: 0.2s;
-            margin-top: 4px;
+            margin-top: 6px;
         }
-        button:hover { background: #2563eb; transform: scale(0.98); }
         .search-btn { background: #0f172a; margin-top: 4px; }
         .voice-controls { display: flex; gap: 10px; margin: 8px 0; }
         .voice-controls button { margin: 0; flex: 1; background: #334155; }
         .voice-on { background: #15803d; }
         .voice-off { background: #b91c1c; }
         .voice-pause { background: #d97706; }
-        .risk-card {
+        .risk-card, .weather-card, .history-panel {
             background: #f8fafc;
             border-radius: 20px;
             padding: 16px;
             margin-top: 16px;
             border-left: 6px solid;
             display: none;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
         .risk-level {
             font-size: 24px;
@@ -75,61 +63,49 @@
             text-align: center;
             padding: 12px;
             border-radius: 40px;
-            margin-bottom: 12px;
         }
         .risk-LOW { background: #22c55e; color: white; }
         .risk-MEDIUM { background: #f97316; color: white; }
         .risk-HIGH { background: #ef4444; color: white; }
-        .route-info { background: #e6f0ff; padding: 12px; border-radius: 16px; margin: 12px 0; font-size: 14px; }
-        .factors-list { padding-left: 20px; margin: 8px 0; }
+        .route-info, .weather-info { background: #e6f0ff; padding: 12px; border-radius: 16px; margin: 12px 0; font-size: 14px; }
         .status-bar {
             background: #eef2ff;
             padding: 8px 12px;
             border-radius: 40px;
             font-size: 12px;
             text-align: center;
-            color: #1e3a8a;
         }
         .legend {
             position: absolute;
             bottom: 20px;
             right: 20px;
             background: rgba(255,255,255,0.9);
-            backdrop-filter: blur(4px);
             padding: 10px 14px;
             border-radius: 20px;
             font-size: 12px;
-            font-weight: 500;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             z-index: 1000;
         }
         .legend-color { display: inline-block; width: 18px; height: 18px; border-radius: 4px; margin-right: 6px; vertical-align: middle; }
-        .instruction {
-            font-size: 11px;
-            background: #f1f5f9;
-            padding: 10px;
-            border-radius: 16px;
-            text-align: center;
-            color: #475569;
-        }
-        hr { margin: 8px 0; border-color: #e2e8f0; }
+        .history-list { max-height: 200px; overflow-y: auto; margin-top: 8px; }
+        .history-item { border-bottom: 1px solid #ddd; padding: 8px; cursor: pointer; }
+        .history-item:hover { background: #e2e8f0; }
     </style>
 </head>
 <body>
 <div class="app-container">
     <div class="sidebar">
-        <h2>🚗 Route Risk Predictor </h2>
-        <div class="status-bar" id="status">💡 Click map to set START, or type address</div>
+        <h2>🚗 Route Risk Predictor</h2>
+        <div class="status-bar" id="status">💡 Type or click map to set START</div>
 
         <div class="form-group">
             <label>📍 START (type or click map)</label>
-            <input type="text" id="start" placeholder="e.g., Delhi">
+            <input type="text" id="start" placeholder="e.g., Connaught Place, Delhi" autocomplete="off">
             <button onclick="searchAddress('start')" class="search-btn">🔍 Search Start</button>
         </div>
-
         <div class="form-group">
             <label>🏁 DESTINATION (type or click map)</label>
-            <input type="text" id="end" placeholder="e.g., Mumbai">
+            <input type="text" id="end" placeholder="e.g., Marine Drive, Mumbai" autocomplete="off">
             <button onclick="searchAddress('end')" class="search-btn">🔍 Search Destination</button>
         </div>
 
@@ -137,36 +113,26 @@
             <label>📧 Email for alerts (optional)</label>
             <input type="email" id="email" placeholder="you@example.com">
         </div>
-
         <div class="form-group">
             <label>🚗 Vehicle</label>
             <select id="vehicle">
-                <option value="Car">Car</option>
-                <option value="Motorcycle">Motorcycle</option>
-                <option value="Truck">Truck</option>
+                <option>Car</option><option>Motorcycle</option><option>Truck</option>
             </select>
         </div>
-
         <div class="form-group">
             <label>⏰ Time of day</label>
             <select id="time">
-                <option value="Morning">Morning (06–12)</option>
-                <option value="Afternoon">Afternoon (12–17)</option>
-                <option value="Evening">Evening (17–21)</option>
-                <option value="Night">Night (21–06)</option>
+                <option>Morning</option><option>Afternoon</option><option>Evening</option><option>Night</option>
             </select>
         </div>
-
         <div class="form-group">
-            <label>🌤️ Weather</label>
+            <label>🌤️ Weather (manual override for risk)</label>
             <select id="weather">
-                <option value="Clear">Clear</option>
-                <option value="Rain">Rain</option>
-                <option value="Fog">Fog</option>
-                <option value="Snow">Snow</option>
+                <option>Clear</option><option>Rain</option><option>Fog</option><option>Snow</option>
             </select>
         </div>
 
+        <button onclick="getUserLocation()" style="background:#10b981;">📍 Use My Live Location</button>
         <button onclick="calculateRoute()">🔍 Calculate Route & Risk</button>
 
         <div class="voice-controls">
@@ -176,6 +142,13 @@
         </div>
         <button onclick="speakNow()" style="background:#3b82f6;">🎤 Speak current risk</button>
         <button onclick="clearAll()" style="background:#475569;">🗑️ Clear all</button>
+        <button onclick="showHistory()" style="background:#6b7280;">📜 View Trip History</button>
+        <button onclick="clearHistory()" style="background:#dc2626; font-size:12px;">🗑️ Clear History</button>
+
+        <div id="historyPanel" class="history-panel">
+            <strong>📜 Past Trips</strong>
+            <div id="historyList" class="history-list"></div>
+        </div>
 
         <div id="riskCard" class="risk-card">
             <div id="riskLevel" class="risk-level"></div>
@@ -183,10 +156,14 @@
             <div id="riskFactors"></div>
             <div id="emailStatus" style="font-size:12px; margin-top:10px; text-align:center;"></div>
         </div>
+
+        <div id="weatherCard" class="weather-card">
+            <strong>🌤️ Live Weather Along Route</strong>
+            <div id="weatherInfo" class="weather-info"></div>
+        </div>
+
         <div class="instruction">
-            ✅ Type any address (street, landmark, city) → TomTom finds it<br>
-            🔥 Heatmap: 🔴 High risk, 🟡 Medium, 🟢 Low accident zones<br>
-            🔊 Voice reads risk level and distance
+            ✅ Live location, live weather, trip history & address autocomplete (safe backend)
         </div>
     </div>
     <div class="map-container">
@@ -201,14 +178,14 @@
 </div>
 
 <script>
-    // ------------------- LEAFLET MAP -------------------
+    // ------------------- GLOBAL VARIABLES -------------------
     let map, routeLayer, heatLayer, startMarker, endMarker;
     let selectingStart = true;
     let currentRouteData = null;
     let voiceEnabled = true;
     let currentUtterance = null;
 
-    // Sample accident hotspots (intensity = risk weight)
+    // Accident hotspots (lat, lon, intensity)
     const HOTSPOTS = [
         [28.6139, 77.2090, 0.95], [28.6300, 77.2200, 0.92], [28.5600, 77.3200, 0.88],
         [19.0760, 72.8777, 0.90], [19.1000, 72.8500, 0.85], [12.9716, 77.5946, 0.82],
@@ -220,33 +197,28 @@
     function initMap() {
         map = L.map('map').setView([20.5937, 78.9629], 5);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> | TomTom traffic'
+            attribution: '© OpenStreetMap | TomTom traffic'
         }).addTo(map);
-
-        // Click on map to set start/destination
         map.on('click', function(e) {
             const lat = e.latlng.lat, lng = e.latlng.lng;
-            const coordStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+            const coord = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
             if (selectingStart) {
-                setMarker('start', lat, lng, coordStr);
-                document.getElementById('status').innerHTML = '✅ Start set. Now click map for DESTINATION or type below.';
+                setMarker('start', lat, lng, coord);
+                document.getElementById('status').innerHTML = '✅ Start set. Now click map for DESTINATION or type.';
             } else {
-                setMarker('end', lat, lng, coordStr);
+                setMarker('end', lat, lng, coord);
                 document.getElementById('status').innerHTML = '✅ Destination set. Click "Calculate Route & Risk".';
             }
             selectingStart = !selectingStart;
         });
-
         addHeatmap();
+        setupAutocomplete();   // safe autocomplete using backend proxy
     }
 
     function addHeatmap() {
         if (heatLayer) map.removeLayer(heatLayer);
         heatLayer = L.heatLayer(HOTSPOTS, {
-            radius: 38,
-            blur: 22,
-            maxZoom: 12,
-            minOpacity: 0.35,
+            radius: 38, blur: 22, maxZoom: 12, minOpacity: 0.35,
             gradient: { 0.2: '#00cc44', 0.5: '#ffaa00', 0.9: '#ff0000' }
         }).addTo(map);
     }
@@ -265,43 +237,152 @@
         }
     }
 
-    // ------------------- ADDRESS SEARCH (backend TomTom) -------------------
+    // ------------------- SAFE AUTOCOMPLETE (backend proxy) -------------------
+    function setupAutocomplete() {
+        const startInput = document.getElementById('start');
+        const endInput = document.getElementById('end');
+        let timeoutId = null;
+
+        function attach(input, pointType) {
+            input.addEventListener('input', function() {
+                const query = this.value.trim();
+                if (query.length < 2) return;
+                if (timeoutId) clearTimeout(timeoutId);
+                timeoutId = setTimeout(async () => {
+                    try {
+                        const res = await fetch(`/autocomplete?query=${encodeURIComponent(query)}`);
+                        const suggestions = await res.json();
+                        if (!suggestions.length) return;
+                        const datalistId = `${pointType}-datalist`;
+                        let datalist = document.getElementById(datalistId);
+                        if (!datalist) {
+                            datalist = document.createElement('datalist');
+                            datalist.id = datalistId;
+                            input.setAttribute('list', datalistId);
+                            input.parentNode.appendChild(datalist);
+                        }
+                        datalist.innerHTML = suggestions.map(s => `<option value="${s.display.replace(/"/g, '&quot;')}">`).join('');
+                    } catch(err) { console.error(err); }
+                }, 300);
+            });
+
+            input.addEventListener('change', async function() {
+                const value = this.value;
+                if (!value) return;
+                const res = await fetch('/geocode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address: value })
+                });
+                const data = await res.json();
+                if (data.error) return;
+                setMarker(pointType, data.lat, data.lon, value);
+                if (pointType === 'start') selectingStart = false;
+                else selectingStart = true;
+            });
+        }
+        attach(startInput, 'start');
+        attach(endInput, 'end');
+    }
+
+    // ------------------- LIVE LOCATION -------------------
+    function getUserLocation() {
+        if (!navigator.geolocation) { alert("Geolocation not supported"); return; }
+        document.getElementById('status').innerHTML = "📍 Getting your location...";
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const lat = pos.coords.latitude, lng = pos.coords.longitude;
+                setMarker('start', lat, lng, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+                selectingStart = false;
+                document.getElementById('status').innerHTML = "✅ Live location set as START! Now set destination.";
+                map.setView([lat, lng], 12);
+            },
+            (err) => { alert("Location error: " + err.message); }
+        );
+    }
+
+    // ------------------- ADDRESS SEARCH (backend geocode) -------------------
     async function searchAddress(pointType) {
-        const address = document.getElementById(pointType).value.trim();
-        if (!address) { alert("Please enter an address"); return; }
-        document.getElementById('status').innerHTML = '🔍 Searching with TomTom...';
+        const addr = document.getElementById(pointType).value.trim();
+        if (!addr) { alert("Enter an address"); return; }
+        document.getElementById('status').innerHTML = '🔍 Searching...';
         try {
-            // Use backend geocoding endpoint (TomTom)
-            const response = await fetch('/geocode', {
+            const resp = await fetch('/geocode', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address: address })
+                body: JSON.stringify({ address: addr })
             });
-            const data = await response.json();
+            const data = await resp.json();
             if (data.error) throw new Error(data.error);
-            setMarker(pointType, data.lat, data.lon, address);
+            setMarker(pointType, data.lat, data.lon, addr);
             if (pointType === 'start') selectingStart = false;
             else selectingStart = true;
-            document.getElementById('status').innerHTML = `✅ ${pointType === 'start' ? 'Start' : 'Destination'} located!`;
+            document.getElementById('status').innerHTML = `✅ ${pointType} found!`;
         } catch (err) {
-            alert("Address not found. Try a landmark or city name.");
-            console.error(err);
+            alert("Address not found. Try landmark or city.");
         }
     }
 
-    // ------------------- ROUTE + RISK -------------------
+    // ------------------- TRIP HISTORY (localStorage) -------------------
+    function saveTripToHistory(start, end, riskLevel, score, distance, duration) {
+        let history = JSON.parse(localStorage.getItem('tripHistory') || '[]');
+        history.unshift({
+            id: Date.now(),
+            start, end,
+            risk: riskLevel,
+            score,
+            distance: distance.toFixed(0),
+            duration: duration.toFixed(0),
+            date: new Date().toLocaleString()
+        });
+        if (history.length > 20) history.pop();
+        localStorage.setItem('tripHistory', JSON.stringify(history));
+    }
+
+    function showHistory() {
+        const panel = document.getElementById('historyPanel');
+        const historyDiv = document.getElementById('historyList');
+        let history = JSON.parse(localStorage.getItem('tripHistory') || '[]');
+        if (history.length === 0) {
+            historyDiv.innerHTML = "<i>No trips saved yet.</i>";
+        } else {
+            historyDiv.innerHTML = history.map(t => `
+                <div class="history-item" onclick="restoreTrip('${t.start.replace(/'/g, "\\'")}', '${t.end.replace(/'/g, "\\'")}')">
+                    <strong>${t.start} → ${t.end}</strong><br>
+                    Risk: ${t.risk} (${t.score}/100) | ${t.distance} km | ${t.duration} min<br>
+                    <small>${t.date}</small>
+                </div>
+            `).join('');
+        }
+        panel.style.display = 'block';
+    }
+
+    function restoreTrip(start, end) {
+        document.getElementById('start').value = start;
+        document.getElementById('end').value = end;
+        document.getElementById('historyPanel').style.display = 'none';
+        calculateRoute();
+    }
+
+    function clearHistory() {
+        if (confirm("Delete all trip history?")) {
+            localStorage.removeItem('tripHistory');
+            document.getElementById('historyList').innerHTML = "";
+            document.getElementById('historyPanel').style.display = 'none';
+        }
+    }
+
+    // ------------------- ROUTE + RISK + WEATHER -------------------
     async function calculateRoute() {
         const start = document.getElementById('start').value;
         const end = document.getElementById('end').value;
-        if (!start || !end) { alert("Please set both start and destination"); return; }
+        if (!start || !end) { alert("Set both start and destination"); return; }
 
-        const card = document.getElementById('riskCard');
-        card.style.display = 'block';
-        document.getElementById('riskLevel').innerHTML = "🔄 Calculating route with live traffic...";
+        document.getElementById('riskCard').style.display = 'block';
+        document.getElementById('riskLevel').innerHTML = "🔄 Calculating...";
 
         const payload = {
-            start: start,
-            end: end,
+            start, end,
             vehicle: document.getElementById('vehicle').value,
             time: document.getElementById('time').value,
             weather: document.getElementById('weather').value,
@@ -321,33 +402,37 @@
             const risk = data.risk;
             currentRouteData = { distance: route.distance_km, duration: route.duration_min, risk };
 
-            // Draw route on map
             if (routeLayer) map.removeLayer(routeLayer);
-            routeLayer = L.polyline(route.points, { color: '#2563eb', weight: 5, opacity: 0.8 }).addTo(map);
+            routeLayer = L.polyline(route.points, { color: '#2563eb', weight: 5 }).addTo(map);
             map.fitBounds(routeLayer.getBounds());
-
-            // Refresh heatmap overlay
             addHeatmap();
 
-            // Update UI
             document.getElementById('riskLevel').innerHTML = `${risk.level} RISK (Score ${risk.score}/100)`;
             document.getElementById('riskLevel').className = `risk-level risk-${risk.level}`;
             document.getElementById('routeInfo').innerHTML = `
-                📍 Distance: ${route.distance_km.toFixed(0)} km &nbsp;|&nbsp;
-                ⏱️ Duration: ${route.duration_min.toFixed(0)} min<br>
-                🚦 Live traffic delay: ${route.traffic_delay_min.toFixed(0)} min
+                📍 ${route.distance_km.toFixed(0)} km &nbsp;|&nbsp;
+                ⏱️ ${route.duration_min.toFixed(0)} min<br>
+                🚦 Traffic delay: ${route.traffic_delay_min.toFixed(0)} min
             `;
-            let factorsHtml = "<strong>⚠️ Risk factors</strong><ul class='factors-list'>";
+            let factorsHtml = "<strong>⚠️ Risk factors</strong><ul>";
             risk.factors.forEach(f => factorsHtml += `<li>${f}</li>`);
             factorsHtml += "</ul>";
             document.getElementById('riskFactors').innerHTML = factorsHtml;
-            if (data.email_sent) document.getElementById('emailStatus').innerHTML = "✅ Alert email sent!";
-            else if (payload.email) document.getElementById('emailStatus').innerHTML = "⚠️ Email not sent (API key missing)";
+            if (data.email_sent) document.getElementById('emailStatus').innerHTML = "✅ Email sent!";
 
-            // Voice announcement if enabled
+            if (data.weather_start && data.weather_end) {
+                document.getElementById('weatherCard').style.display = 'block';
+                document.getElementById('weatherInfo').innerHTML = `
+                    Start: ${data.weather_start.desc}, ${data.weather_start.temp}°C, wind ${data.weather_start.wind} km/h<br>
+                    Destination: ${data.weather_end.desc}, ${data.weather_end.temp}°C, wind ${data.weather_end.wind} km/h
+                `;
+            }
+
+            saveTripToHistory(start, end, risk.level, risk.score, route.distance_km, route.duration_min);
+
             if (voiceEnabled) {
-                let msg = `${risk.level} risk route. ${route.distance_km.toFixed(0)} kilometers, ${route.duration_min.toFixed(0)} minutes.`;
-                if (risk.level === 'HIGH') msg = "Warning! " + msg + " Drive with extreme caution.";
+                let msg = `${risk.level} risk. ${route.distance_km.toFixed(0)} km, ${route.duration_min.toFixed(0)} min.`;
+                if (risk.level === 'HIGH') msg = "Warning! " + msg;
                 speakMessage(msg);
             }
         } catch (err) {
@@ -355,7 +440,7 @@
         }
     }
 
-    // ------------------- VOICE HELPERS -------------------
+    // ------------------- VOICE -------------------
     function speakMessage(msg) {
         if (!voiceEnabled) return;
         if (currentUtterance) window.speechSynthesis.cancel();
@@ -364,13 +449,12 @@
         currentUtterance.onend = () => { currentUtterance = null; };
         window.speechSynthesis.speak(currentUtterance);
     }
-
-    function voiceOn() { voiceEnabled = true; speakMessage("Voice alerts on"); document.getElementById('status').innerHTML = "🔊 Voice ON"; }
+    function voiceOn() { voiceEnabled = true; speakMessage("Voice on"); document.getElementById('status').innerHTML = "🔊 Voice ON"; }
     function voiceOff() { voiceEnabled = false; if (currentUtterance) window.speechSynthesis.cancel(); document.getElementById('status').innerHTML = "🔇 Voice OFF"; }
     function voicePause() { if (window.speechSynthesis.speaking) window.speechSynthesis.cancel(); }
     function speakNow() {
-        if (!currentRouteData) speakMessage("Please calculate a route first.");
-        else speakMessage(`${currentRouteData.risk.level} risk route. ${currentRouteData.distance.toFixed(0)} kilometers, ${currentRouteData.duration.toFixed(0)} minutes.`);
+        if (!currentRouteData) speakMessage("Calculate a route first.");
+        else speakMessage(`${currentRouteData.risk.level} risk. ${currentRouteData.distance.toFixed(0)} km, ${currentRouteData.duration.toFixed(0)} min.`);
     }
 
     // ------------------- RESET -------------------
@@ -384,7 +468,9 @@
         document.getElementById('start').value = '';
         document.getElementById('end').value = '';
         document.getElementById('riskCard').style.display = 'none';
-        document.getElementById('status').innerHTML = '💡 Click map to set START or type address';
+        document.getElementById('weatherCard').style.display = 'none';
+        document.getElementById('historyPanel').style.display = 'none';
+        document.getElementById('status').innerHTML = '💡 Type or click map to set START';
         map.setView([20.5937, 78.9629], 5);
         addHeatmap();
     }
