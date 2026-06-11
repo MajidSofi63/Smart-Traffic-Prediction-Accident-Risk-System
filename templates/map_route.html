@@ -26,20 +26,23 @@
         .map-container { flex:1; position:relative; }
         #map { height:100%; width:100%; }
         /* Mobile hamburger button (left side) */
+        /* Mobile hamburger button (left side) */
         .hamburger {
-            display:none;
-            position:fixed;
-            top:16px;
-            left:16px;
-            z-index:1000;
-            background:white;
-            border:none;
-            font-size:28px;
-            cursor:pointer;
-            border-radius:12px;
-            padding:8px 12px;
-            box-shadow:0 2px 8px rgba(0,0,0,0.2);
-            color:#1e3a8a;
+            display: none;
+            position: absolute; /* Ensures it pins relative to the viewport container */
+            top: 16px;
+            left: 16px;
+            right: auto;        /* Overrides any inherited centering */
+            width: auto;        /* Prevents the button from stretching full-width */
+            z-index: 1000;
+            background: white;
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            border-radius: 12px;
+            padding: 8px 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            color: #1e3a8a;
         }
         /* Mobile overlay sidebar */
         .sidebar-mobile {
