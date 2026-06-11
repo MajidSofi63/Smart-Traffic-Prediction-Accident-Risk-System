@@ -3,27 +3,72 @@
 <head>
     <title>Route Risk Predictor – Live Traffic & Weather</title>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <!-- Leaflet core + heatmap -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+    <!-- MarkerMotion plugin for moving marker -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.marker-motion@0.7.0/leaflet.marker-motion.css" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet.marker-motion@0.7.0/leaflet.marker-motion.js"></script>
     <style>
-        * { box-sizing: border-box; }
-        body { margin: 0; font-family: 'Segoe UI', Roboto, Arial, sans-serif; background: #f0f2f5; }
-        .app-container { display: flex; height: 100vh; }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+            background: #f0f2f5;
+        }
+        /* Main container – column on mobile, row on desktop */
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        /* Sidebar – full width on mobile, fixed width on desktop */
         .sidebar {
-            width: 420px;
             background: white;
-            padding: 20px;
-            box-shadow: 2px 0 12px rgba(0,0,0,0.1);
+            padding: 16px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             overflow-y: auto;
             z-index: 10;
+            transition: all 0.3s;
         }
-        .map-container { flex: 1; position: relative; }
-        #map { height: 100%; width: 100%; }
-        h2 { color: #1e3a8a; margin: 0 0 8px 0; }
-        .form-group { margin-bottom: 12px; }
-        label { font-weight: 600; font-size: 13px; color: #334155; display: block; margin-bottom: 4px; }
+        .map-container {
+            flex: 1;
+            position: relative;
+            min-height: 300px;
+        }
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        /* Responsive breakpoint */
+        @media (min-width: 768px) {
+            .app-container {
+                flex-direction: row;
+            }
+            .sidebar {
+                width: 420px;
+                box-shadow: 2px 0 12px rgba(0,0,0,0.1);
+            }
+        }
+        h2 {
+            color: #1e3a8a;
+            margin: 0 0 8px 0;
+            font-size: 1.5rem;
+        }
+        .form-group {
+            margin-bottom: 12px;
+        }
+        label {
+            font-weight: 600;
+            font-size: 13px;
+            color: #334155;
+            display: block;
+            margin-bottom: 4px;
+        }
         input, select {
             width: 100%;
             padding: 10px 12px;
@@ -42,10 +87,24 @@
             font-weight: bold;
             cursor: pointer;
             margin-top: 6px;
+            transition: background 0.2s;
         }
-        .search-btn { background: #0f172a; margin-top: 4px; }
-        .voice-controls { display: flex; gap: 10px; margin: 8px 0; }
-        .voice-controls button { margin: 0; flex: 1; background: #334155; }
+        button:hover {
+            background: #2563eb;
+        }
+        .search-btn {
+            background: #0f172a;
+        }
+        .voice-controls {
+            display: flex;
+            gap: 10px;
+            margin: 8px 0;
+        }
+        .voice-controls button {
+            margin: 0;
+            flex: 1;
+            background: #334155;
+        }
         .voice-on { background: #15803d; }
         .voice-off { background: #b91c1c; }
         .voice-pause { background: #d97706; }
@@ -67,29 +126,73 @@
         .risk-LOW { background: #22c55e; color: white; }
         .risk-MEDIUM { background: #f97316; color: white; }
         .risk-HIGH { background: #ef4444; color: white; }
-        .route-info, .weather-info { background: #e6f0ff; padding: 12px; border-radius: 16px; margin: 12px 0; font-size: 14px; }
+        .route-info, .weather-info {
+            background: #e6f0ff;
+            padding: 12px;
+            border-radius: 16px;
+            margin: 12px 0;
+            font-size: 14px;
+        }
         .status-bar {
             background: #eef2ff;
             padding: 8px 12px;
             border-radius: 40px;
             font-size: 12px;
             text-align: center;
+            margin-bottom: 12px;
         }
         .legend {
             position: absolute;
             bottom: 20px;
             right: 20px;
             background: rgba(255,255,255,0.9);
-            padding: 10px 14px;
+            backdrop-filter: blur(4px);
+            padding: 8px 12px;
             border-radius: 20px;
             font-size: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             z-index: 1000;
         }
-        .legend-color { display: inline-block; width: 18px; height: 18px; border-radius: 4px; margin-right: 6px; vertical-align: middle; }
-        .history-list { max-height: 200px; overflow-y: auto; margin-top: 8px; }
-        .history-item { border-bottom: 1px solid #ddd; padding: 8px; cursor: pointer; }
-        .history-item:hover { background: #e2e8f0; }
+        .legend-color {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        .history-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 8px;
+        }
+        .history-item {
+            border-bottom: 1px solid #ddd;
+            padding: 8px;
+            cursor: pointer;
+        }
+        .history-item:hover {
+            background: #e2e8f0;
+        }
+        .instruction {
+            font-size: 11px;
+            background: #f1f5f9;
+            padding: 10px;
+            border-radius: 16px;
+            text-align: center;
+            margin-top: 12px;
+            color: #475569;
+        }
+        .journey-controls {
+            display: flex;
+            gap: 8px;
+            margin: 10px 0;
+        }
+        .journey-controls button {
+            background: #0f172a;
+            margin: 0;
+            flex: 1;
+        }
     </style>
 </head>
 <body>
@@ -135,6 +238,13 @@
         <button onclick="getUserLocation()" style="background:#10b981;">📍 Use My Live Location</button>
         <button onclick="calculateRoute()">🔍 Calculate Route & Risk</button>
 
+        <!-- Journey animation controls (appear after route is calculated) -->
+        <div id="journeyControls" class="journey-controls" style="display: none;">
+            <button id="startJourneyBtn">▶️ Start Journey</button>
+            <button id="pauseJourneyBtn">⏸️ Pause</button>
+            <button id="resetJourneyBtn">🔄 Reset</button>
+        </div>
+
         <div class="voice-controls">
             <button onclick="voiceOn()" class="voice-on">🔊 ON</button>
             <button onclick="voiceOff()" class="voice-off">🔇 OFF</button>
@@ -162,7 +272,10 @@
             <div id="weatherInfo" class="weather-info"></div>
         </div>
 
-        
+        <div class="instruction">
+            ✅ Live location • Live weather • Trip history • Address autocomplete<br>
+            🚗 After route is drawn, use "Start Journey" to see a moving marker!
+        </div>
     </div>
     <div class="map-container">
         <div id="map"></div>
@@ -182,6 +295,8 @@
     let currentRouteData = null;
     let voiceEnabled = true;
     let currentUtterance = null;
+    let movingMarker = null;          // reference to the animated marker
+    let currentLatLngs = null;        // store route points for animation
 
     // Accident hotspots (lat, lon, intensity)
     const HOTSPOTS = [
@@ -210,7 +325,7 @@
             selectingStart = !selectingStart;
         });
         addHeatmap();
-        setupAutocomplete();   // safe autocomplete using backend proxy
+        setupAutocomplete();
     }
 
     function addHeatmap() {
@@ -370,7 +485,7 @@
         }
     }
 
-    // ------------------- ROUTE + RISK + WEATHER -------------------
+    // ------------------- ROUTE + RISK + WEATHER + MOVING MARKER -------------------
     async function calculateRoute() {
         const start = document.getElementById('start').value;
         const end = document.getElementById('end').value;
@@ -400,11 +515,28 @@
             const risk = data.risk;
             currentRouteData = { distance: route.distance_km, duration: route.duration_min, risk };
 
+            // Draw static route line
             if (routeLayer) map.removeLayer(routeLayer);
             routeLayer = L.polyline(route.points, { color: '#2563eb', weight: 5 }).addTo(map);
             map.fitBounds(routeLayer.getBounds());
             addHeatmap();
 
+            // Store route points for moving marker
+            currentLatLngs = route.points.map(p => L.latLng(p[0], p[1]));
+
+            // Destroy old moving marker if exists
+            if (movingMarker) {
+                movingMarker.remove();
+                movingMarker = null;
+            }
+
+            // Show journey control buttons
+            const controlsDiv = document.getElementById('journeyControls');
+            controlsDiv.style.display = 'flex';
+            // Setup button event listeners (only once)
+            setupJourneyButtons();
+
+            // Display risk and weather
             document.getElementById('riskLevel').innerHTML = `${risk.level} RISK (Score ${risk.score}/100)`;
             document.getElementById('riskLevel').className = `risk-level risk-${risk.level}`;
             document.getElementById('routeInfo').innerHTML = `
@@ -438,6 +570,48 @@
         }
     }
 
+    // ------------------- MOVING MARKER WITH LEAFLET.MARKERMOTION -------------------
+    function setupJourneyButtons() {
+        // Remove previous listeners to avoid duplicates
+        const startBtn = document.getElementById('startJourneyBtn');
+        const pauseBtn = document.getElementById('pauseJourneyBtn');
+        const resetBtn = document.getElementById('resetJourneyBtn');
+        const newStartBtn = startBtn.cloneNode(true);
+        const newPauseBtn = pauseBtn.cloneNode(true);
+        const newResetBtn = resetBtn.cloneNode(true);
+        startBtn.parentNode.replaceChild(newStartBtn, startBtn);
+        pauseBtn.parentNode.replaceChild(newPauseBtn, pauseBtn);
+        resetBtn.parentNode.replaceChild(newResetBtn, resetBtn);
+
+        newStartBtn.addEventListener('click', () => {
+            if (!currentLatLngs || currentLatLngs.length === 0) return;
+            if (movingMarker) movingMarker.remove();
+            // Create moving marker with auto-rotation
+            const icon = L.divIcon({
+                html: '<div style="background:#1e3a8a; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 5px black;"></div>',
+                iconSize: [24, 24],
+                className: 'moving-marker'
+            });
+            // You can also use a car icon: https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png
+            movingMarker = L.markerMotion(currentLatLngs, 50, {  // 50 km/h speed
+                icon: icon,
+                rotation: true,
+                autoplay: true,
+                loop: false,
+                center: false   // set to true if you want map to follow marker
+            }).addTo(map);
+            movingMarker.on('end', () => {
+                speakMessage("You have reached your destination.");
+            });
+        });
+        newPauseBtn.addEventListener('click', () => {
+            if (movingMarker) movingMarker.pause();
+        });
+        newResetBtn.addEventListener('click', () => {
+            if (movingMarker) movingMarker.reset();
+        });
+    }
+
     // ------------------- VOICE -------------------
     function speakMessage(msg) {
         if (!voiceEnabled) return;
@@ -460,14 +634,17 @@
         if (startMarker) map.removeLayer(startMarker);
         if (endMarker) map.removeLayer(endMarker);
         if (routeLayer) map.removeLayer(routeLayer);
-        startMarker = endMarker = routeLayer = null;
+        if (movingMarker) movingMarker.remove();
+        startMarker = endMarker = routeLayer = movingMarker = null;
         selectingStart = true;
         currentRouteData = null;
+        currentLatLngs = null;
         document.getElementById('start').value = '';
         document.getElementById('end').value = '';
         document.getElementById('riskCard').style.display = 'none';
         document.getElementById('weatherCard').style.display = 'none';
         document.getElementById('historyPanel').style.display = 'none';
+        document.getElementById('journeyControls').style.display = 'none';
         document.getElementById('status').innerHTML = '💡 Type or click map to set START';
         map.setView([20.5937, 78.9629], 5);
         addHeatmap();
