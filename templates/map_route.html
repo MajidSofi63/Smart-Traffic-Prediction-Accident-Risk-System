@@ -4,7 +4,7 @@
     <title>Route Risk Predictor – Live Traffic & Weather</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <!-- Leaflet (no zoom control, no attribution) -->
+    <!-- Leaflet + heatmap + marker motion (without default controls) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
@@ -177,7 +177,7 @@
         <div class="instruction">✅ Live location • Live weather • Trip history • Autocomplete<br>🚗 After route, use "Start Journey" for moving marker.</div>
     </div>
 
-    <!-- Mobile hamburger -->
+    <!-- Mobile hamburger button (left side) -->
     <button class="hamburger" id="hamburgerBtn">☰</button>
 
     <!-- Mobile overlay sidebar -->
@@ -304,6 +304,12 @@
             history.unshift({ id:Date.now(), start, end, risk:risk.level, score:risk.score, distance:route.distance_km.toFixed(0), duration:route.duration_min.toFixed(0), date:new Date().toLocaleString() });
             if (history.length > 20) history.pop();
             localStorage.setItem('tripHistory', JSON.stringify(history));
+
+            // --- AUTO-CLOSE MOBILE SIDEBAR AFTER ROUTE CALCULATION ---
+            if (isMobile && window.innerWidth < 768) {
+                document.getElementById('mobileSidebar').classList.remove('open');
+                document.getElementById('overlay').style.display = 'none';
+            }
             return true;
         } catch (err) {
             alert("Error: " + err.message);
@@ -352,7 +358,7 @@
         if (coords) setMarker(type, coords.lat, coords.lon, addr);
         else alert("Address not found");
     }
-    function getUserLocationMobile() { getUserLocationDesktop(); } // reuses same logic
+    function getUserLocationMobile() { getUserLocationDesktop(); }
     function calculateRouteMobile() {
         const start = document.getElementById('startMobile').value;
         const end = document.getElementById('endMobile').value;
@@ -515,7 +521,7 @@
         attach('endMobile');
     }
 
-    // Hamburger menu
+    // ---------- HAMBURGER MENU & SWIPE DETECTION ----------
     document.getElementById('hamburgerBtn')?.addEventListener('click', () => {
         document.getElementById('mobileSidebar').classList.add('open');
         document.getElementById('overlay').style.display = 'block';
@@ -527,6 +533,29 @@
     document.getElementById('overlay')?.addEventListener('click', () => {
         document.getElementById('mobileSidebar').classList.remove('open');
         document.getElementById('overlay').style.display = 'none';
+    });
+
+    // Swipe left/right to open/close sidebar
+    let touchStartX = 0;
+    document.addEventListener('touchstart', (e) => {
+        touchStartX = e.changedTouches[0].screenX;
+    });
+    document.addEventListener('touchend', (e) => {
+        const touchEndX = e.changedTouches[0].screenX;
+        const swipeDistance = touchEndX - touchStartX;
+        const sidebar = document.getElementById('mobileSidebar');
+        const overlay = document.getElementById('overlay');
+
+        // Swipe right > 70px → open (if not already open)
+        if (swipeDistance > 70 && !sidebar.classList.contains('open')) {
+            sidebar.classList.add('open');
+            overlay.style.display = 'block';
+        }
+        // Swipe left < -70px → close (if open)
+        if (swipeDistance < -70 && sidebar.classList.contains('open')) {
+            sidebar.classList.remove('open');
+            overlay.style.display = 'none';
+        }
     });
 
     window.addEventListener('load', initMap);
