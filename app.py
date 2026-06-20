@@ -37,33 +37,56 @@ def geocode(address):
         pass
     return None
 
-# ============ TOMTOM ROUTING (with live traffic) ============
-def get_route(start_coords, end_coords):
+# ============ TOMTOM ROUTING (with live traffic + guidance) ============
+def get_routes(start_coords, end_coords, travel_mode='car'):
     url = f"https://api.tomtom.com/routing/1/calculateRoute/{start_coords['lat']},{start_coords['lon']}:{end_coords['lat']},{end_coords['lon']}/json"
     params = {
         'key': TOMTOM_KEY,
         'traffic': 'true',
-        'travelMode': 'car',
+        'travelMode': travel_mode,
         'routeType': 'fastest',
-        'computeTravelTimeFor': 'all'
+        'computeTravelTimeFor': 'all',
+        'maxAlternatives': 1,
+        'instructionsType': 'text',
+        'sectionType': 'traffic',
+        'report': 'effectiveSettings'
     }
     try:
         resp = requests.get(url, params=params, timeout=15)
         data = resp.json()
         if not data.get('routes'):
-            return None
-        route = data['routes'][0]
-        leg = route['legs'][0]
-        points = [[p['latitude'], p['longitude']] for p in leg['points']]
-        summary = leg['summary']
-        return {
-            'distance_km': summary['lengthInMeters'] / 1000,
-            'duration_min': summary['travelTimeInSeconds'] / 60,
-            'traffic_delay_min': summary.get('trafficDelayInSeconds', 0) / 60,
-            'points': points
-        }
-    except:
-        return None
+            return []
+
+        parsed_routes = []
+        for idx, route in enumerate(data['routes']):
+            leg = route['legs'][0]
+            points = [[p['latitude'], p['longitude']] for p in leg['points']]
+            summary = leg['summary']
+
+            # Parse turn-by-turn guidance instructions
+            instructions = []
+            guidance = route.get('guidance', {})
+            for inst in guidance.get('instructions', []):
+                instructions.append({
+                    'message': inst.get('message', ''),
+                    'street': inst.get('street', ''),
+                    'maneuver': inst.get('maneuver', 'STRAIGHT'),
+                    'point_index': inst.get('pointIndex', 0),
+                    'route_offset_m': inst.get('routeOffsetInMeters', 0)
+                })
+
+            parsed_routes.append({
+                'route_index': idx,
+                'distance_km': summary['lengthInMeters'] / 1000,
+                'duration_min': summary['travelTimeInSeconds'] / 60,
+                'traffic_delay_min': summary.get('trafficDelayInSeconds', 0) / 60,
+                'points': points,
+                'instructions': instructions
+            })
+        return parsed_routes
+    except Exception as e:
+        print(f"Error fetching routes: {e}")
+        return []
 
 # ============ WEATHER (Open‑Meteo, no API key) ============
 def get_weather(lat, lon):
@@ -354,8 +377,16 @@ def api_route():
     if not start_coords or not end_coords:
         return jsonify({'error': 'Address not found'}), 400
 
-    route = get_route(start_coords, end_coords)
-    if not route:
+    # Map vehicle selection to TomTom travelMode
+    tomtom_vehicle_map = {
+        'Car': 'car',
+        'Motorcycle': 'motorcycle',
+        'Truck': 'truck'
+    }
+    travel_mode = tomtom_vehicle_map.get(vehicle, 'car')
+
+    routes = get_routes(start_coords, end_coords, travel_mode=travel_mode)
+    if not routes:
         return jsonify({'error': 'Route not found'}), 400
 
     weather_start = get_weather(start_coords['lat'], start_coords['lon'])
@@ -408,33 +439,123 @@ def api_route():
     elif weather_cond == 'Snow':
         weather_ml = 'Snowing no high winds'
 
-    inputs_dict = {
-        'Day_of_Week': day_of_week,
-        'Junction_Control': junction_control,
-        'Light_Conditions': light_cond,
-        'Road_Surface_Conditions': road_surface,
-        'Road_Type': road_type,
-        'Speed_limit': int(speed_limit),
-        'Urban_or_Rural_Area': urban_rural,
-        'Weather_Conditions': weather_ml,
-        'Number_of_Vehicles': int(num_vehicles),
-        'Number_of_Casualties': int(num_casualties)
-    }
+    evaluated_routes = []
+    for idx, r in enumerate(routes):
+        inputs_dict = {
+            'Day_of_Week': day_of_week,
+            'Junction_Control': junction_control,
+            'Light_Conditions': light_cond,
+            'Road_Surface_Conditions': road_surface,
+            'Road_Type': road_type,
+            'Speed_limit': int(speed_limit),
+            'Urban_or_Rural_Area': urban_rural,
+            'Weather_Conditions': weather_ml,
+            'Number_of_Vehicles': int(num_vehicles),
+            'Number_of_Casualties': int(num_casualties)
+        }
 
-    risk = predict_accident_risk(inputs_dict, vehicle_type=vehicle)
-    email_sent = send_email(user_email, route, risk) if user_email else False
+        # Calculate ML risk
+        risk = predict_accident_risk(inputs_dict, vehicle_type=vehicle)
+        
+        # Differentiate alternative route factors if longer
+        if idx > 0 and r['distance_km'] > routes[0]['distance_km']:
+            risk['score'] = min(risk['score'] + 5, 100)
+            if risk['score'] >= 60:
+                risk['level'] = 'HIGH'
+            elif risk['score'] >= 30:
+                risk['level'] = 'MEDIUM'
+            risk['factors'].append("🛣️ Alternative path – extended exposure distance increases overall risk profile.")
+
+        r['risk'] = risk
+        evaluated_routes.append(r)
+
+    # Safest route is the one with the lowest risk score
+    safest_route = min(evaluated_routes, key=lambda x: x['risk']['score'])
+    email_sent = send_email(user_email, safest_route, safest_route['risk']) if user_email else False
 
     return jsonify({
-        'route': route,
-        'risk': risk,
+        'routes': evaluated_routes,
         'email_sent': email_sent,
         'weather_start': weather_start,
         'weather_end': weather_end
     })
 
+@app.route('/api/incidents', methods=['POST'])
+def api_incidents():
+    data = request.json
+    bbox = data.get('bbox')  # [minLat, minLon, maxLat, maxLon]
+    if not bbox or not TOMTOM_KEY:
+        return jsonify({'incidents': []})
+
+    # TomTom Traffic Incidents API v5: bbox is minLon,minLat,maxLon,maxLat
+    bbox_str = f"{bbox[1]},{bbox[0]},{bbox[3]},{bbox[2]}"
+    url = "https://api.tomtom.com/traffic/services/5/incidentDetails"
+    params = {
+        'key': TOMTOM_KEY,
+        'bbox': bbox_str,
+        'fields': '{incidents{type,geometry{type,coordinates},properties{iconCategory,magnitudeOfDelay,events{description,code},from,to,delay,roadNumbers}}}',
+        'language': 'en-GB',
+        'categoryFilter': '0,1,2,3,4,5,6,7,8',
+        'timeValidityFilter': 'present'
+    }
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        result = resp.json()
+        incidents = []
+        for inc in result.get('incidents', []):
+            geom = inc.get('geometry', {})
+            props = inc.get('properties', {})
+            coords = geom.get('coordinates', [])
+
+            if geom.get('type') == 'Point' and coords:
+                point = [coords[1], coords[0]]
+            elif geom.get('type') == 'LineString' and coords:
+                mid = coords[len(coords)//2]
+                point = [mid[1], mid[0]]
+            else:
+                continue
+
+            events = props.get('events', [])
+            desc = events[0].get('description', 'Traffic incident') if events else 'Traffic incident'
+            category = props.get('iconCategory', 0)
+            delay = props.get('delay', 0)
+
+            incidents.append({
+                'lat': point[0],
+                'lon': point[1],
+                'category': category,
+                'description': desc,
+                'delay_sec': delay,
+                'from': props.get('from', ''),
+                'to': props.get('to', '')
+            })
+        return jsonify({'incidents': incidents})
+    except Exception as e:
+        print(f"Incidents API error: {e}")
+        return jsonify({'incidents': []})
+
+@app.route('/api/reverse_geocode', methods=['GET'])
+def reverse_geocode():
+    lat = request.args.get('lat')
+    lon = request.args.get('lon')
+    if not lat or not lon:
+        return jsonify({'address': ''})
+    url = f"https://api.tomtom.com/search/2/reverseGeocode/{lat},{lon}.json"
+    params = {'key': TOMTOM_KEY}
+    try:
+        resp = requests.get(url, params=params, timeout=8)
+        data = resp.json()
+        results = data.get('addresses', [])
+        if results:
+            addr = results[0].get('address', {}).get('freeformAddress', '')
+            return jsonify({'address': addr})
+    except Exception as e:
+        print(f"Reverse geocode error: {e}")
+    return jsonify({'address': ''})
+
 @app.route('/health')
 def health():
-    return jsonify({'status': 'ok', 'geocoding': 'TomTom', 'routing': 'TomTom', 'weather': 'Open-Meteo'})
+    return jsonify({'status': 'ok', 'geocoding': 'TomTom', 'routing': 'TomTom', 'weather': 'Open-Meteo', 'ml': model_loaded})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))

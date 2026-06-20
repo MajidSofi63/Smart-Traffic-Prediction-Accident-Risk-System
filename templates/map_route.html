@@ -1,993 +1,506 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Smart Traffic IQ – ML Route Risk Predictor</title>
+    <title>Smart Traffic IQ – Live Navigation & ML Safety Predictor</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta name="description" content="AI-driven smart traffic safety route planner. Predict accident hazards and evaluate risks in real time using ML models.">
-    
-    <!-- Google Fonts: Plus Jakarta Sans & Outfit -->
+    <meta name="description" content="AI-powered smart traffic safety route planner with live GPS navigation, turn-by-turn directions, and real-time accident risk prediction using machine learning.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    
-    <!-- Leaflet core + heatmap -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
-    
-    <!-- Lucide Icons -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-
     <style>
         :root {
             --bg-main: #060913;
-            --bg-sidebar: rgba(10, 16, 32, 0.78);
-            --bg-card: rgba(22, 32, 59, 0.6);
-            --border-glass: rgba(255, 255, 255, 0.08);
-            --text-primary: #f8fafc;
+            --bg-sidebar: rgba(8,13,28,0.88);
+            --bg-card: rgba(16,24,48,0.7);
+            --bg-card-hover: rgba(22,34,66,0.8);
+            --border-glass: rgba(255,255,255,0.08);
+            --border-active: rgba(59,130,246,0.35);
+            --text-primary: #f1f5f9;
             --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            
+            --text-muted: #475569;
             --primary: #3b82f6;
-            --primary-grad: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-            --primary-hover: #2563eb;
-            
+            --primary-dark: #1d4ed8;
+            --primary-grad: linear-gradient(135deg,#3b82f6 0%,#8b5cf6 100%);
             --low-color: #10b981;
-            --low-glow: rgba(16, 185, 129, 0.2);
+            --low-glow: rgba(16,185,129,0.2);
             --medium-color: #f59e0b;
-            --medium-glow: rgba(245, 158, 11, 0.2);
+            --medium-glow: rgba(245,158,11,0.2);
             --high-color: #ef4444;
-            --high-glow: rgba(239, 68, 68, 0.25);
-            
+            --high-glow: rgba(239,68,68,0.25);
+            --incident-color: #f97316;
             --font-display: 'Outfit', sans-serif;
             --font-sans: 'Plus Jakarta Sans', sans-serif;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: var(--font-sans);
-        }
-
-        body {
-            overflow: hidden;
-            height: 100vh;
-            width: 100vw;
-            background: var(--bg-main);
-            color: var(--text-primary);
-        }
-
-        /* App Layout Container */
-        .app-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-        }
-
-        /* Map styling */
-        #map {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-            background: #0d111a;
-        }
-
-        /* Darken Leaflet elements to integrate into Dark Mode */
-        .leaflet-container {
-            background-color: #0b0e14 !important;
-        }
-        .leaflet-popup-content-wrapper, .leaflet-popup-tip {
-            background: rgba(15, 23, 42, 0.9) !important;
-            color: var(--text-primary) !important;
-            border: 1px solid var(--border-glass);
-            backdrop-filter: blur(10px);
-            border-radius: 12px;
-        }
-        .leaflet-popup-content {
-            font-family: var(--font-sans);
-            font-size: 0.82rem;
-            font-weight: 500;
-        }
-
-        /* Floating Sidebar (Desktop) */
-        .sidebar {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            bottom: 20px;
-            width: 420px;
-            background: var(--bg-sidebar);
-            backdrop-filter: blur(24px) saturate(180%);
-            -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border: 1px solid var(--border-glass);
-            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
-            border-radius: 24px;
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .bottom-sheet-handle {
-            display: none;
-            width: 50px;
-            height: 5px;
-            background: rgba(255, 255, 255, 0.15);
-            border-radius: 99px;
-            margin: 12px auto 4px auto;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-
-        /* Header Style */
-        .sidebar-header {
-            padding: 22px 26px 16px 26px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            flex-shrink: 0;
-        }
-
-        .sidebar-header h1 {
-            font-family: var(--font-display);
-            font-size: 1.5rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            background: linear-gradient(90deg, #60a5fa 0%, #a78bfa 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .status-bar {
-            margin-top: 10px;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.03);
-            color: var(--text-secondary);
-            padding: 8px 14px;
-            border-radius: 12px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.3s ease;
-        }
-
-        .status-bar.active-status {
-            background: rgba(59, 130, 246, 0.1);
-            color: #60a5fa;
-            border-color: rgba(59, 130, 246, 0.2);
-        }
-
-        /* Scroll Area */
-        .sidebar-scroll {
-            padding: 20px 26px;
-            overflow-y: auto;
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
-        .sidebar-scroll::-webkit-scrollbar {
-            width: 5px;
-        }
-        .sidebar-scroll::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .sidebar-scroll::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 99px;
-        }
-
-        /* Form Controls */
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            position: relative;
-        }
-
-        .form-group label {
-            font-size: 0.72rem;
-            font-weight: 800;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-        }
-
-        .input-container {
-            position: relative;
-            display: flex;
-            align-items: center;
-        }
-
-        .input-icon {
-            position: absolute;
-            left: 14px;
-            color: var(--text-secondary);
-            width: 16px;
-            height: 16px;
-            pointer-events: none;
-        }
-
-        .form-group input, .form-group select {
-            width: 100%;
-            padding: 12px 14px 12px 42px;
-            border: 1px solid var(--border-glass);
-            border-radius: 14px;
-            font-size: 0.9rem;
-            background: rgba(15, 23, 42, 0.4);
-            color: var(--text-primary);
-            outline: none;
-            transition: all 0.25s ease;
-            font-weight: 500;
-        }
-
-        .form-group input:focus, .form-group select:focus {
-            border-color: var(--primary);
-            background: rgba(15, 23, 42, 0.7);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
-        }
-
-        .inline-btn {
-            position: absolute;
-            right: 8px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: var(--primary-grad);
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 10px;
-            font-size: 0.75rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .inline-btn:hover {
-            transform: translateY(-50%) scale(1.03);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-        }
-
-        /* Flex Parameter Grid */
-        .params-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 8px;
-        }
-
-        .params-grid .form-group input, .params-grid .form-group select {
-            padding-left: 12px;
-        }
-
-        .select-wrapper {
-            position: relative;
-            width: 100%;
-        }
-
-        .select-wrapper select {
-            appearance: none;
-            -webkit-appearance: none;
-            padding-right: 28px;
-        }
-
-        .select-wrapper::after {
-            content: "↓";
-            font-size: 0.75rem;
-            font-weight: 700;
-            color: var(--text-secondary);
-            position: absolute;
-            right: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            pointer-events: none;
-        }
-
-        /* Collapsible Advanced Parameters Panel */
-        .advanced-panel {
-            border: 1px solid var(--border-glass);
-            border-radius: 16px;
-            background: rgba(255, 255, 255, 0.01);
-            overflow: hidden;
-            transition: all 0.3s ease;
-        }
-
-        .advanced-header {
-            padding: 12px 16px;
-            background: rgba(255, 255, 255, 0.02);
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.78rem;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-        }
-
-        .advanced-header:hover {
-            background: rgba(255, 255, 255, 0.04);
-            color: var(--text-primary);
-        }
-
-        .advanced-content {
-            padding: 16px;
-            display: none;
-            flex-direction: column;
-            gap: 12px;
-            border-top: 1px solid var(--border-glass);
-        }
-
-        .advanced-content.expanded {
-            display: flex;
-        }
-
-        .slider-group {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .slider-group input[type="range"] {
-            flex-grow: 1;
-            padding: 0;
-            height: 6px;
-            background: #1e293b;
-            border-radius: 5px;
-            outline: none;
-            accent-color: #3b82f6;
-            cursor: pointer;
-        }
-
-        .slider-value {
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: #3b82f6;
-            min-width: 48px;
-            text-align: right;
-        }
-
-        /* Voice Alerts Control Panel */
-        .voice-controls-row {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(255, 255, 255, 0.02);
-            padding: 8px 12px;
-            border-radius: 14px;
-            border: 1px solid var(--border-glass);
-        }
-
-        .voice-controls-row .label-text {
-            font-size: 0.72rem;
-            font-weight: 800;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            margin-right: auto;
-            letter-spacing: 0.3px;
-        }
-
-        .voice-toggle-btn {
-            padding: 8px 12px;
-            border: 1px solid var(--border-glass);
-            border-radius: 10px;
-            background: rgba(15, 23, 42, 0.6);
-            color: var(--text-secondary);
-            font-size: 0.75rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.25s ease;
-        }
-
-        .voice-toggle-btn:hover {
-            color: var(--text-primary);
-            border-color: rgba(255, 255, 255, 0.2);
-        }
-
-        .voice-toggle-btn.active {
-            background: var(--primary);
-            color: white;
-            border-color: var(--primary);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-        }
-
-        /* Primary Action Button */
-        button.primary-btn {
-            width: 100%;
-            padding: 14px;
-            background: var(--primary-grad);
-            border: none;
-            border-radius: 14px;
-            color: white;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            font-size: 0.95rem;
-            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.35);
-        }
-
-        button.primary-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 30px rgba(59, 130, 246, 0.55);
-        }
-
-        /* Card Styling */
-        .card {
-            background: var(--bg-card);
-            border-radius: 20px;
-            padding: 18px;
-            border: 1px solid var(--border-glass);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-            transition: all 0.4s ease;
-        }
-
-        /* ML Risk Assessment Card */
-        .risk-card {
-            display: none;
-            border-left: 5px solid var(--border-glass);
-        }
-
-        .risk-card.glow-LOW {
-            border-left-color: var(--low-color);
-            box-shadow: 0 12px 32px var(--low-glow);
-        }
-        .risk-card.glow-MEDIUM {
-            border-left-color: var(--medium-color);
-            box-shadow: 0 12px 32px var(--medium-glow);
-        }
-        .risk-card.glow-HIGH {
-            border-left-color: var(--high-color);
-            box-shadow: 0 12px 32px var(--high-glow);
-        }
-
-        .risk-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-        }
-
-        .severity-badge {
-            font-family: var(--font-display);
-            font-size: 1.15rem;
-            font-weight: 900;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            padding: 6px 14px;
-            border-radius: 12px;
-        }
-
-        .badge-LOW { background: rgba(16, 185, 129, 0.15); color: var(--low-color); border: 1px solid rgba(16, 185, 129, 0.25); }
-        .badge-MEDIUM { background: rgba(245, 158, 11, 0.15); color: var(--medium-color); border: 1px solid rgba(245, 158, 11, 0.25); }
-        .badge-HIGH { background: rgba(239, 68, 68, 0.15); color: var(--high-color); border: 1px solid rgba(239, 68, 68, 0.25); }
-
-        .confidence-indicator {
-            text-align: right;
-            font-size: 0.75rem;
-            font-weight: 700;
-            color: var(--text-secondary);
-        }
-
-        .confidence-bar {
-            width: 100px;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 4px;
-            margin-top: 4px;
-            overflow: hidden;
-            display: inline-block;
-        }
-
-        .confidence-bar-fill {
-            height: 100%;
-            background: var(--primary-grad);
-            width: 0%;
-            transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        /* Risk Score circular ring */
-        .score-display-row {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            margin-bottom: 16px;
-        }
-
-        .score-circle {
-            position: relative;
-            width: 68px;
-            height: 68px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .score-circle svg {
-            width: 100%;
-            height: 100%;
-            transform: rotate(-90deg);
-        }
-
-        .score-circle circle {
-            fill: none;
-            stroke-width: 6;
-        }
-
-        .score-circle .circle-bg {
-            stroke: rgba(255, 255, 255, 0.05);
-        }
-
-        .score-circle .circle-progress {
-            stroke: var(--primary);
-            stroke-linecap: round;
-            stroke-dasharray: 207;
-            stroke-dashoffset: 207;
-            transition: stroke-dashoffset 0.8s ease-out;
-        }
-
-        .score-text {
-            position: absolute;
-            font-family: var(--font-display);
-            font-size: 1.15rem;
-            font-weight: 800;
-            color: var(--text-primary);
-        }
-
-        .score-info {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .score-label {
-            font-size: 0.72rem;
-            font-weight: 800;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .score-desc {
-            font-size: 0.82rem;
-            color: var(--text-primary);
-            font-weight: 600;
-            margin-top: 2px;
-        }
-
-        /* Route Info Grid */
-        .route-info-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            background: rgba(0,0,0,0.2);
-            padding: 12px;
-            border-radius: 14px;
-            margin-bottom: 16px;
-        }
-
-        .route-info-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-            font-weight: 600;
-        }
-
-        .route-info-item svg {
-            width: 16px;
-            height: 16px;
-            color: #60a5fa;
-        }
-
-        /* Risk Factors List */
-        .risk-factors-title {
-            font-size: 0.78rem;
-            font-weight: 800;
-            color: var(--text-primary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .risk-factors-list {
-            list-style: none;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .risk-factors-list li {
-            font-size: 0.78rem;
-            color: var(--text-secondary);
-            line-height: 1.4;
-            padding: 8px 10px;
-            background: rgba(255, 255, 255, 0.02);
-            border-radius: 10px;
-            border-left: 3px solid rgba(255, 255, 255, 0.1);
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-        }
-
-        .risk-factors-list li.factor-alert {
-            border-left-color: var(--high-color);
-            background: rgba(239, 68, 68, 0.03);
-        }
-
-        /* Live Weather Display */
-        .weather-card {
-            display: none;
-        }
-
-        .weather-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 10px;
-        }
-
-        .weather-box {
-            padding: 12px;
-            background: rgba(0,0,0,0.18);
-            border-radius: 14px;
-            border: 1px solid rgba(255, 255, 255, 0.02);
-        }
-
-        .weather-box-name {
-            font-size: 0.65rem;
-            font-weight: 800;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 4px;
-        }
-
-        .weather-box-val {
-            font-size: 0.8rem;
-            font-weight: 600;
-            line-height: 1.4;
-            color: var(--text-primary);
-        }
-
-        /* Trip History Panel */
-        .history-panel {
-            display: none;
-        }
-
-        .history-list {
-            max-height: 160px;
-            overflow-y: auto;
-            margin-top: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .history-item {
-            border: 1px solid var(--border-glass);
-            background: rgba(255, 255, 255, 0.02);
-            padding: 10px 12px;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .history-item:hover {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: rgba(255, 255, 255, 0.15);
-        }
-
-        .history-item-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.8rem;
-            font-weight: 700;
-            color: var(--text-primary);
-            gap: 8px;
-        }
-
-        .history-item-details {
-            font-size: 0.72rem;
-            color: var(--text-secondary);
-            margin-top: 4px;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .history-badge {
-            padding: 2px 6px;
-            border-radius: 6px;
-            font-size: 0.62rem;
-            font-weight: 800;
-            text-transform: uppercase;
-        }
-
-        /* Floating Action Buttons Column */
-        .floating-actions {
-            position: absolute;
-            bottom: 30px;
-            right: 20px;
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .fab {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: rgba(15, 23, 42, 0.85);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--border-glass);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            color: var(--text-primary);
-        }
-
-        .fab:hover {
-            transform: scale(1.1);
-            background: rgba(21, 32, 58, 0.95);
-            border-color: rgba(255, 255, 255, 0.2);
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
-        }
-
-        .fab.active {
-            background: var(--primary);
-            color: white;
-            border-color: var(--primary);
-            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
-        }
-
-        .fab svg {
-            width: 20px;
-            height: 20px;
-        }
-
-        /* Animated Marker motion along route */
-        .moving-marker div {
-            background: #60a5fa !important;
-            width: 18px !important;
-            height: 18px !important;
-            border-radius: 50% !important;
-            border: 3px solid white !important;
-            box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.4) !important;
-            animation: pulse-marker 1.4s infinite ease-in-out;
-        }
-
-        @keyframes pulse-marker {
-            0% {
-                box-shadow: 0 0 0 0px rgba(59, 130, 246, 0.5);
-            }
-            70% {
-                box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
-            }
-            100% {
-                box-shadow: 0 0 0 0px rgba(59, 130, 246, 0);
-            }
-        }
-
-        /* Journey Control strip */
-        .journey-controls {
-            display: none;
-            background: rgba(0,0,0,0.3);
-            border: 1px solid var(--border-glass);
-            padding: 8px;
-            border-radius: 14px;
-            gap: 6px;
-        }
-
-        .journey-controls button {
-            flex: 1;
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.05);
-            color: var(--text-primary);
-            padding: 8px;
-            font-size: 0.72rem;
-            font-weight: 700;
-            cursor: pointer;
-            border-radius: 10px;
-            transition: all 0.2s;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .journey-controls button:hover {
-            background: rgba(255,255,255,0.08);
-            border-color: rgba(255,255,255,0.15);
-        }
-
-        .journey-controls button svg {
-            width: 14px;
-            height: 14px;
-        }
-
-        /* Legend Card */
-        .legend {
-            position: absolute;
-            bottom: 30px;
-            left: 20px;
-            background: rgba(10, 16, 32, 0.8);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--border-glass);
-            padding: 12px 16px;
-            border-radius: 16px;
-            font-size: 0.75rem;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .legend strong {
-            color: var(--text-primary);
-            font-family: var(--font-display);
-            font-size: 0.8rem;
-            letter-spacing: 0.3px;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--text-secondary);
-            font-weight: 600;
-        }
-
-        .legend-color {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 4px;
-        }
-
-        /* ------------------- RESPONSIVE MOBILE VIEW ------------------- */
-        @media (max-width: 767px) {
-            .sidebar {
-                position: fixed;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                top: auto;
-                width: 100%;
-                height: 70vh;
-                border-radius: 28px 28px 0 0;
-                transform: translateY(0);
-                box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.6);
-                background: rgba(9, 14, 28, 0.95);
-            }
-            
-            .sidebar.collapsed {
-                transform: translateY(calc(100% - 94px));
-            }
-            
-            .bottom-sheet-handle {
-                display: block;
-            }
-            
-            .sidebar-header {
-                padding: 4px 26px 14px 26px;
-                cursor: pointer;
-            }
-
-            .sidebar-scroll {
-                padding: 16px 20px;
-                gap: 12px;
-            }
-            
-            .floating-actions {
-                bottom: 114px; /* Align above collapsed bottom sheet */
-                right: 16px;
-            }
-            
-            .legend {
-                bottom: auto;
-                top: 20px;
-                right: 20px;
-                left: auto;
-                font-size: 0.7rem;
-                padding: 8px 12px;
-                border-radius: 12px;
-            }
+            --sidebar-w: 420px;
+            --hud-h: 72px;
+            --radius-lg: 22px;
+            --radius-md: 14px;
+            --radius-sm: 10px;
+            --shadow-glass: 0 16px 48px rgba(0,0,0,0.55);
+            --transition: all 0.3s cubic-bezier(0.16,1,0.3,1);
+        }
+        *{box-sizing:border-box;margin:0;padding:0;font-family:var(--font-sans);}
+        body{overflow:hidden;height:100vh;width:100vw;background:var(--bg-main);color:var(--text-primary);}
+        .app-container{position:relative;width:100vw;height:100vh;}
+        #map{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;background:#080d1a;}
+        .leaflet-container{background-color:#080d1a !important;}
+        .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:rgba(10,18,40,0.96) !important;color:var(--text-primary) !important;border:1px solid var(--border-glass);backdrop-filter:blur(12px);border-radius:12px;}
+        .leaflet-popup-content{font-family:var(--font-sans);font-size:0.82rem;font-weight:500;line-height:1.5;}
+
+        /* =================== JOURNEY HUD =================== */
+        .journey-hud{
+            position:absolute;top:0;left:0;right:0;height:var(--hud-h);z-index:1100;
+            background:rgba(6,9,19,0.94);backdrop-filter:blur(20px) saturate(180%);
+            border-bottom:1px solid var(--border-glass);
+            box-shadow:0 4px 24px rgba(0,0,0,0.5);
+            display:flex;flex-direction:column;
+            transform:translateY(-100%);transition:transform 0.4s cubic-bezier(0.16,1,0.3,1);
+        }
+        .journey-hud.visible{transform:translateY(0);}
+        .hud-progress-bar{height:3px;background:rgba(255,255,255,0.08);flex-shrink:0;}
+        .hud-progress-fill{height:100%;background:var(--primary-grad);width:0%;transition:width 0.5s ease;border-radius:0 2px 2px 0;}
+        .hud-stats{display:flex;align-items:center;flex:1;padding:0 20px;gap:0;}
+        .hud-stat{display:flex;flex-direction:column;align-items:center;flex:1;padding:0 12px;}
+        .hud-val{font-family:var(--font-display);font-size:1.4rem;font-weight:800;color:var(--text-primary);line-height:1;}
+        .hud-lbl{font-size:0.62rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.6px;margin-top:2px;}
+        .hud-divider{width:1px;height:32px;background:var(--border-glass);flex-shrink:0;}
+        .hud-end-btn{
+            margin-left:auto;padding:8px 18px;background:rgba(239,68,68,0.15);
+            border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius-sm);
+            color:var(--high-color);font-size:0.78rem;font-weight:800;cursor:pointer;
+            transition:var(--transition);letter-spacing:0.3px;
+        }
+        .hud-end-btn:hover{background:rgba(239,68,68,0.25);transform:scale(1.03);}
+
+        /* =================== TURN-BY-TURN =================== */
+        .tbt-panel{
+            position:absolute;top:84px;left:20px;z-index:1050;
+            background:var(--bg-sidebar);backdrop-filter:blur(20px) saturate(180%);
+            border:1px solid var(--border-glass);border-radius:var(--radius-lg);
+            box-shadow:var(--shadow-glass);padding:14px 18px;
+            display:flex;align-items:center;gap:14px;min-width:280px;max-width:360px;
+            transform:translateX(-130%);transition:transform 0.4s cubic-bezier(0.16,1,0.3,1);
+        }
+        .tbt-panel.visible{transform:translateX(0);}
+        .tbt-direction{
+            width:48px;height:48px;border-radius:var(--radius-sm);
+            background:var(--primary-grad);display:flex;align-items:center;justify-content:center;flex-shrink:0;
+            box-shadow:0 4px 16px rgba(59,130,246,0.35);
+        }
+        .tbt-direction svg{width:22px;height:22px;color:white;}
+        .tbt-info{display:flex;flex-direction:column;gap:2px;overflow:hidden;}
+        .tbt-instruction{font-family:var(--font-display);font-size:0.95rem;font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .tbt-street{font-size:0.78rem;font-weight:600;color:var(--primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .tbt-distance{font-size:0.72rem;font-weight:700;color:var(--text-secondary);margin-top:2px;}
+
+        /* =================== SIDEBAR =================== */
+        .sidebar{
+            position:absolute;top:20px;left:20px;bottom:20px;width:var(--sidebar-w);
+            background:var(--bg-sidebar);backdrop-filter:blur(28px) saturate(200%);
+            -webkit-backdrop-filter:blur(28px) saturate(200%);
+            border:1px solid var(--border-glass);box-shadow:var(--shadow-glass);
+            border-radius:var(--radius-lg);z-index:1000;
+            display:flex;flex-direction:column;overflow:hidden;
+            transition:var(--transition);
+        }
+        .sidebar.nav-mode{transform:translateX(calc(-100% - 40px));}
+        .bottom-sheet-handle{display:none;width:48px;height:5px;background:rgba(255,255,255,0.12);border-radius:99px;margin:12px auto 4px auto;cursor:pointer;flex-shrink:0;}
+        .sidebar-header{padding:20px 24px 14px;border-bottom:1px solid rgba(255,255,255,0.04);flex-shrink:0;}
+        .sidebar-header h1{font-family:var(--font-display);font-size:1.45rem;font-weight:800;letter-spacing:-0.3px;background:linear-gradient(90deg,#60a5fa 0%,#a78bfa 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;display:flex;align-items:center;gap:9px;}
+        .header-row{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:8px;}
+        .status-bar{flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);color:var(--text-secondary);padding:7px 12px;border-radius:var(--radius-sm);font-size:0.78rem;font-weight:600;display:flex;align-items:center;gap:7px;transition:var(--transition);overflow:hidden;}
+        .status-bar.active-status{background:rgba(59,130,246,0.1);color:#60a5fa;border-color:rgba(59,130,246,0.2);}
+        .status-bar.error-status{background:rgba(239,68,68,0.08);color:var(--high-color);border-color:rgba(239,68,68,0.2);}
+        .status-dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;animation:pulse-dot 2s infinite;}
+        @keyframes pulse-dot{0%,100%{opacity:1;}50%{opacity:0.4;}}
+        .share-btn{padding:7px 11px;background:rgba(255,255,255,0.04);border:1px solid var(--border-glass);border-radius:var(--radius-sm);color:var(--text-secondary);font-size:0.72rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;transition:var(--transition);white-space:nowrap;}
+        .share-btn:hover{color:var(--text-primary);border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.07);}
+        .share-btn svg{width:13px;height:13px;}
+
+        .sidebar-scroll{padding:18px 22px;overflow-y:auto;flex-grow:1;display:flex;flex-direction:column;gap:14px;}
+        .sidebar-scroll::-webkit-scrollbar{width:4px;}
+        .sidebar-scroll::-webkit-scrollbar-track{background:transparent;}
+        .sidebar-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:99px;}
+
+        /* =================== FORM =================== */
+        .form-group{display:flex;flex-direction:column;gap:5px;position:relative;}
+        .form-group label{font-size:0.68rem;font-weight:800;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.9px;}
+        .input-container{position:relative;display:flex;align-items:center;}
+        .input-icon{position:absolute;left:13px;color:var(--text-secondary);width:15px;height:15px;pointer-events:none;}
+        .form-group input,.form-group select{width:100%;padding:11px 13px 11px 40px;border:1px solid var(--border-glass);border-radius:var(--radius-md);font-size:0.88rem;background:rgba(10,18,40,0.5);color:var(--text-primary);outline:none;transition:var(--transition);font-weight:500;}
+        .form-group input:focus,.form-group select:focus{border-color:var(--primary);background:rgba(10,18,40,0.8);box-shadow:0 0 0 3px rgba(59,130,246,0.15);}
+        .form-group select{appearance:none;-webkit-appearance:none;cursor:pointer;}
+        .inline-btn{position:absolute;right:7px;top:50%;transform:translateY(-50%);background:var(--primary-grad);color:white;border:none;padding:5px 11px;border-radius:9px;font-size:0.72rem;font-weight:800;cursor:pointer;transition:var(--transition);}
+        .inline-btn:hover{transform:translateY(-50%) scale(1.04);box-shadow:0 4px 12px rgba(59,130,246,0.3);}
+        .params-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+        .params-grid .form-group input,.params-grid .form-group select{padding-left:10px;}
+        .select-wrapper{position:relative;width:100%;}
+        .select-wrapper::after{content:"↓";font-size:0.7rem;font-weight:700;color:var(--text-secondary);position:absolute;right:11px;top:50%;transform:translateY(-50%);pointer-events:none;}
+        .select-wrapper select{padding-right:26px;}
+        .advanced-panel{border:1px solid var(--border-glass);border-radius:var(--radius-md);background:rgba(255,255,255,0.01);overflow:hidden;}
+        .advanced-header{padding:11px 14px;background:rgba(255,255,255,0.02);cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:0.74rem;font-weight:700;letter-spacing:0.4px;color:var(--text-secondary);text-transform:uppercase;transition:var(--transition);}
+        .advanced-header:hover{background:rgba(255,255,255,0.05);color:var(--text-primary);}
+        .advanced-content{padding:14px;display:none;flex-direction:column;gap:10px;border-top:1px solid var(--border-glass);}
+        .advanced-content.expanded{display:flex;}
+        .slider-group{display:flex;align-items:center;gap:10px;}
+        .slider-group input[type="range"]{flex-grow:1;padding:0;height:5px;background:#1e293b;border-radius:5px;outline:none;accent-color:var(--primary);cursor:pointer;}
+        .slider-value{font-size:0.82rem;font-weight:700;color:var(--primary);min-width:50px;text-align:right;}
+        .voice-controls-row{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.02);padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--border-glass);}
+        .voice-controls-row .label-text{font-size:0.7rem;font-weight:800;color:var(--text-secondary);text-transform:uppercase;margin-right:auto;letter-spacing:0.3px;}
+        .voice-toggle-btn{padding:7px 11px;border:1px solid var(--border-glass);border-radius:9px;background:rgba(10,18,40,0.6);color:var(--text-secondary);font-size:0.73rem;font-weight:700;cursor:pointer;transition:var(--transition);}
+        .voice-toggle-btn:hover{color:var(--text-primary);border-color:rgba(255,255,255,0.2);}
+        .voice-toggle-btn.active{background:var(--primary);color:white;border-color:var(--primary);box-shadow:0 4px 12px rgba(59,130,246,0.3);}
+
+        /* =================== BUTTONS =================== */
+        button.primary-btn{width:100%;padding:13px;background:var(--primary-grad);border:none;border-radius:var(--radius-md);color:white;font-weight:700;cursor:pointer;transition:var(--transition);display:flex;align-items:center;justify-content:center;gap:8px;font-size:0.93rem;box-shadow:0 8px 24px rgba(59,130,246,0.35);}
+        button.primary-btn:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(59,130,246,0.5);}
+        button.primary-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none;}
+        @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+        .spinner{display:inline-block;width:16px;height:16px;border:2.5px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.8s linear infinite;}
+
+        /* =================== CARDS =================== */
+        .card{background:var(--bg-card);border-radius:var(--radius-lg);padding:16px;border:1px solid var(--border-glass);box-shadow:0 8px 24px rgba(0,0,0,0.15);transition:var(--transition);}
+        .risk-card{display:none;border-left:4px solid var(--border-glass);}
+        .risk-card.glow-LOW{border-left-color:var(--low-color);box-shadow:0 12px 32px var(--low-glow);}
+        .risk-card.glow-MEDIUM{border-left-color:var(--medium-color);box-shadow:0 12px 32px var(--medium-glow);}
+        .risk-card.glow-HIGH{border-left-color:var(--high-color);box-shadow:0 12px 32px var(--high-glow);}
+        .risk-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+        .severity-badge{font-family:var(--font-display);font-size:1.05rem;font-weight:900;text-transform:uppercase;letter-spacing:0.5px;padding:5px 13px;border-radius:10px;}
+        .badge-LOW{background:rgba(16,185,129,0.12);color:var(--low-color);border:1px solid rgba(16,185,129,0.22);}
+        .badge-MEDIUM{background:rgba(245,158,11,0.12);color:var(--medium-color);border:1px solid rgba(245,158,11,0.22);}
+        .badge-HIGH{background:rgba(239,68,68,0.12);color:var(--high-color);border:1px solid rgba(239,68,68,0.22);}
+        .confidence-indicator{text-align:right;font-size:0.73rem;font-weight:700;color:var(--text-secondary);}
+        .confidence-bar{width:90px;height:5px;background:rgba(255,255,255,0.08);border-radius:4px;margin-top:4px;overflow:hidden;display:inline-block;}
+        .confidence-bar-fill{height:100%;background:var(--primary-grad);width:0%;transition:width 0.8s cubic-bezier(0.16,1,0.3,1);}
+        .score-display-row{display:flex;align-items:center;gap:14px;margin-bottom:14px;}
+        .score-circle{position:relative;width:66px;height:66px;display:flex;align-items:center;justify-content:center;}
+        .score-circle svg{width:100%;height:100%;transform:rotate(-90deg);}
+        .score-circle circle{fill:none;stroke-width:6;}
+        .score-circle .circle-bg{stroke:rgba(255,255,255,0.05);}
+        .score-circle .circle-progress{stroke:var(--primary);stroke-linecap:round;stroke-dasharray:207;stroke-dashoffset:207;transition:stroke-dashoffset 0.8s ease-out;}
+        .score-text{position:absolute;font-family:var(--font-display);font-size:1.1rem;font-weight:800;color:var(--text-primary);}
+        .score-info{display:flex;flex-direction:column;}
+        .score-label{font-size:0.68rem;font-weight:800;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;}
+        .score-desc{font-size:0.8rem;color:var(--text-primary);font-weight:600;margin-top:3px;}
+        .route-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;background:rgba(0,0,0,0.2);padding:11px;border-radius:12px;margin-bottom:14px;}
+        .route-info-item{display:flex;align-items:center;gap:7px;font-size:0.78rem;color:var(--text-secondary);font-weight:600;}
+        .route-info-item svg{width:14px;height:14px;color:#60a5fa;flex-shrink:0;}
+        .risk-factors-title{font-size:0.72rem;font-weight:800;color:var(--text-primary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:9px;display:flex;align-items:center;gap:6px;}
+        .risk-factors-list{list-style:none;display:flex;flex-direction:column;gap:7px;}
+        .risk-factors-list li{font-size:0.76rem;color:var(--text-secondary);line-height:1.45;padding:7px 9px;background:rgba(255,255,255,0.02);border-radius:9px;border-left:3px solid rgba(255,255,255,0.08);display:flex;align-items:flex-start;gap:7px;}
+        .risk-factors-list li.factor-alert{border-left-color:var(--high-color);background:rgba(239,68,68,0.03);}
+
+        /* =================== ROUTE COMPARISON =================== */
+        .routes-compare-section{margin-top:12px;border-top:1px solid var(--border-glass);padding-top:11px;display:none;}
+        .route-selection-item{padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid var(--border-glass);border-radius:var(--radius-md);cursor:pointer;transition:var(--transition);display:flex;justify-content:space-between;align-items:center;gap:8px;}
+        .route-selection-item:hover{background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.14);}
+        .route-selection-item.selected-route{background:rgba(59,130,246,0.1);border-color:rgba(59,130,246,0.32);}
+        .route-path-info{display:flex;flex-direction:column;gap:2px;}
+        .route-path-title{font-size:0.79rem;font-weight:700;color:var(--text-primary);}
+        .route-path-meta{font-size:0.68rem;color:var(--text-secondary);}
+        .route-path-badge{display:flex;align-items:center;gap:5px;flex-shrink:0;}
+        .history-badge{padding:3px 8px;border-radius:7px;font-size:0.62rem;font-weight:800;text-transform:uppercase;}
+        .badge-LOW{background:rgba(16,185,129,0.12);color:var(--low-color);}
+        .badge-MEDIUM{background:rgba(245,158,11,0.12);color:var(--medium-color);}
+        .badge-HIGH{background:rgba(239,68,68,0.12);color:var(--high-color);}
+
+        /* =================== RISK CHART =================== */
+        .risk-chart-card{display:none;padding:14px;}
+        .risk-chart-wrapper{position:relative;height:100px;margin-top:8px;}
+
+        /* =================== WEATHER =================== */
+        .weather-card{display:none;}
+        .weather-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:9px;}
+        .weather-box{padding:11px;background:rgba(0,0,0,0.18);border-radius:12px;border:1px solid rgba(255,255,255,0.03);}
+        .weather-box-name{font-size:0.62rem;font-weight:800;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;}
+        .weather-box-val{font-size:0.78rem;font-weight:600;line-height:1.5;color:var(--text-primary);}
+
+        /* =================== INCIDENTS =================== */
+        .incidents-pill{
+            position:absolute;top:20px;right:80px;z-index:1050;
+            background:rgba(8,13,28,0.9);backdrop-filter:blur(12px);
+            border:1px solid rgba(249,115,22,0.3);border-radius:20px;
+            padding:8px 14px;display:none;align-items:center;gap:7px;
+            cursor:pointer;transition:var(--transition);
+            font-size:0.78rem;font-weight:700;color:var(--incident-color);
+            box-shadow:0 4px 16px rgba(249,115,22,0.2);
+        }
+        .incidents-pill svg{width:14px;height:14px;}
+        .incidents-pill:hover{background:rgba(249,115,22,0.12);transform:translateY(-1px);}
+        .incidents-drawer{
+            position:absolute;top:64px;right:20px;width:300px;z-index:1040;
+            background:rgba(8,13,28,0.96);backdrop-filter:blur(20px);
+            border:1px solid rgba(249,115,22,0.2);border-radius:var(--radius-lg);
+            box-shadow:var(--shadow-glass);padding:14px;
+            display:none;flex-direction:column;gap:8px;max-height:50vh;overflow-y:auto;
+        }
+        .incidents-drawer.open{display:flex;}
+        .incident-item{padding:9px 11px;background:rgba(249,115,22,0.05);border:1px solid rgba(249,115,22,0.15);border-radius:var(--radius-sm);font-size:0.76rem;}
+        .incident-item-title{font-weight:700;color:var(--incident-color);margin-bottom:2px;}
+        .incident-item-meta{color:var(--text-secondary);font-size:0.7rem;}
+
+        /* =================== JOURNEY CONTROLS =================== */
+        .journey-controls{
+            display:none;background:rgba(0,0,0,0.25);border:1px solid var(--border-glass);
+            padding:8px;border-radius:var(--radius-md);gap:6px;
+        }
+        .journey-controls button{flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);color:var(--text-primary);padding:8px;font-size:0.7rem;font-weight:700;cursor:pointer;border-radius:9px;transition:var(--transition);display:flex;flex-direction:column;align-items:center;gap:3px;}
+        .journey-controls button:hover{background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.14);}
+        .journey-controls button svg{width:13px;height:13px;}
+        .active-journey-controls{display:none;background:rgba(0,0,0,0.2);border:1px solid rgba(16,185,129,0.2);padding:8px;border-radius:var(--radius-md);gap:6px;}
+        .active-journey-controls button{flex:1;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);color:var(--text-primary);padding:8px;font-size:0.7rem;font-weight:700;cursor:pointer;border-radius:9px;transition:var(--transition);display:flex;flex-direction:column;align-items:center;gap:3px;}
+        .active-journey-controls button:hover{background:rgba(255,255,255,0.06);}
+        .active-journey-controls button svg{width:13px;height:13px;}
+        .journey-progress-section{display:none;padding:10px;background:rgba(0,0,0,0.2);border-radius:var(--radius-md);border:1px solid var(--border-glass);}
+        .jp-label{font-size:0.68rem;font-weight:800;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center;}
+        .jp-bar{height:6px;background:rgba(255,255,255,0.07);border-radius:4px;overflow:hidden;}
+        .jp-fill{height:100%;background:var(--primary-grad);width:0%;transition:width 0.5s ease;border-radius:4px;}
+
+        /* =================== HISTORY =================== */
+        .history-panel{display:none;}
+        .history-list{max-height:150px;overflow-y:auto;margin-top:9px;display:flex;flex-direction:column;gap:7px;}
+        .history-item{border:1px solid var(--border-glass);background:rgba(255,255,255,0.02);padding:9px 11px;border-radius:11px;cursor:pointer;transition:var(--transition);}
+        .history-item:hover{background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.14);}
+        .history-item-header{display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;font-weight:700;color:var(--text-primary);gap:7px;}
+        .history-item-details{font-size:0.7rem;color:var(--text-secondary);margin-top:3px;display:flex;justify-content:space-between;}
+
+        /* =================== FLOATING ACTIONS =================== */
+        .floating-actions{position:absolute;bottom:28px;right:20px;z-index:1000;display:flex;flex-direction:column;gap:10px;}
+        .fab{width:46px;height:46px;border-radius:50%;background:rgba(8,13,28,0.88);backdrop-filter:blur(12px);border:1px solid var(--border-glass);box-shadow:0 8px 24px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.25s cubic-bezier(0.175,0.885,0.32,1.275);color:var(--text-primary);}
+        .fab:hover{transform:scale(1.12);background:rgba(15,24,50,0.95);border-color:rgba(255,255,255,0.18);box-shadow:0 12px 28px rgba(0,0,0,0.4);}
+        .fab.active{background:var(--primary);color:white;border-color:var(--primary);box-shadow:0 8px 20px rgba(59,130,246,0.4);}
+        .fab svg{width:18px;height:18px;}
+        .fab-tooltip{position:absolute;right:56px;background:rgba(10,18,40,0.95);color:var(--text-primary);font-size:0.72rem;font-weight:700;padding:4px 9px;border-radius:7px;white-space:nowrap;opacity:0;transition:opacity 0.2s;pointer-events:none;border:1px solid var(--border-glass);}
+        .fab:hover .fab-tooltip{opacity:1;}
+
+        /* =================== LEGEND =================== */
+        .legend{position:absolute;bottom:28px;left:20px;background:rgba(8,13,28,0.88);backdrop-filter:blur(12px);border:1px solid var(--border-glass);padding:11px 14px;border-radius:14px;font-size:0.73rem;box-shadow:0 8px 24px rgba(0,0,0,0.3);z-index:1000;display:flex;flex-direction:column;gap:5px;}
+        .legend strong{color:var(--text-primary);font-family:var(--font-display);font-size:0.76rem;letter-spacing:0.2px;margin-bottom:2px;display:block;}
+        .legend-item{display:flex;align-items:center;gap:7px;color:var(--text-secondary);font-weight:600;}
+        .legend-color{display:inline-block;width:10px;height:10px;border-radius:3px;}
+
+        /* =================== SHARE TOAST =================== */
+        .share-toast{
+            position:absolute;top:24px;left:50%;transform:translateX(-50%) translateY(-80px);
+            background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);
+            color:var(--low-color);padding:10px 20px;border-radius:20px;
+            font-size:0.82rem;font-weight:700;z-index:2000;
+            backdrop-filter:blur(12px);display:flex;align-items:center;gap:8px;
+            transition:transform 0.4s cubic-bezier(0.16,1,0.3,1);
+        }
+        .share-toast.visible{transform:translateX(-50%) translateY(0);}
+        .share-toast svg{width:15px;height:15px;}
+
+        /* =================== ARRIVAL MODAL =================== */
+        .arrival-modal{
+            position:absolute;inset:0;z-index:2000;
+            background:rgba(6,9,19,0.85);backdrop-filter:blur(16px);
+            display:flex;align-items:center;justify-content:center;
+            opacity:0;pointer-events:none;transition:opacity 0.5s ease;
+        }
+        .arrival-modal.visible{opacity:1;pointer-events:all;}
+        .arrival-card{
+            background:var(--bg-sidebar);border:1px solid var(--border-glass);
+            border-radius:28px;padding:36px 32px;text-align:center;
+            max-width:320px;box-shadow:var(--shadow-glass);
+            transform:scale(0.8);transition:transform 0.5s cubic-bezier(0.16,1,0.3,1);
+        }
+        .arrival-modal.visible .arrival-card{transform:scale(1);}
+        .arrival-icon{font-size:3.5rem;margin-bottom:12px;animation:bounce-icon 0.6s ease 0.3s both;}
+        @keyframes bounce-icon{0%{transform:scale(0);}60%{transform:scale(1.2);}100%{transform:scale(1);}}
+        .arrival-title{font-family:var(--font-display);font-size:1.6rem;font-weight:900;color:var(--text-primary);margin-bottom:6px;}
+        .arrival-sub{font-size:0.85rem;color:var(--text-secondary);font-weight:500;margin-bottom:20px;}
+        .arrival-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;}
+        .arrival-stat-box{background:rgba(0,0,0,0.25);border-radius:12px;padding:12px;border:1px solid var(--border-glass);}
+        .arrival-stat-val{font-family:var(--font-display);font-size:1.2rem;font-weight:800;color:var(--primary);}
+        .arrival-stat-lbl{font-size:0.65rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-top:3px;}
+        .arrival-close-btn{width:100%;padding:12px;background:var(--primary-grad);border:none;border-radius:12px;color:white;font-weight:700;font-size:0.9rem;cursor:pointer;transition:var(--transition);}
+        .arrival-close-btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(59,130,246,0.4);}
+
+        /* =================== MOVING MARKER =================== */
+        .moving-marker div{background:#60a5fa !important;width:17px !important;height:17px !important;border-radius:50% !important;border:2.5px solid white !important;box-shadow:0 0 0 6px rgba(59,130,246,0.35) !important;animation:pulse-marker 1.4s infinite ease-in-out;}
+        @keyframes pulse-marker{0%{box-shadow:0 0 0 0px rgba(59,130,246,0.5);}70%{box-shadow:0 0 0 10px rgba(59,130,246,0);}100%{box-shadow:0 0 0 0px rgba(59,130,246,0);}}
+
+        /* =================== MOBILE =================== */
+        @media(max-width:767px){
+            .sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;height:72vh;border-radius:26px 26px 0 0;transform:translateY(0);box-shadow:0 -12px 40px rgba(0,0,0,0.6);background:rgba(6,10,22,0.97);}
+            .sidebar.collapsed{transform:translateY(calc(100% - 90px));}
+            .sidebar.nav-mode{transform:translateY(calc(100% - 90px));}
+            .bottom-sheet-handle{display:block;}
+            .sidebar-header{padding:4px 22px 12px;cursor:pointer;}
+            .sidebar-scroll{padding:14px 18px;gap:11px;}
+            .floating-actions{bottom:102px;right:14px;}
+            .legend{bottom:auto;top:20px;right:20px;left:auto;font-size:0.68rem;padding:8px 11px;border-radius:11px;}
+            .incidents-pill{top:68px;right:14px;}
+            .tbt-panel{top:auto;bottom:100px;left:14px;right:64px;max-width:none;transform:translateY(100px);opacity:0;}
+            .tbt-panel.visible{transform:translateY(0);opacity:1;}
+            .journey-hud{height:60px;}
+            .hud-val{font-size:1.1rem;}
         }
     </style>
 </head>
 <body>
 <div class="app-container">
     <div id="map"></div>
-    
-    <!-- Heatmap Risk Zones Legend -->
-    <div class="legend">
-        <strong>🔥 Accident risk zones</strong>
-        <div class="legend-item"><span class="legend-color" style="background:#ef4444;"></span> High Severity</div>
-        <div class="legend-item"><span class="legend-color" style="background:#f59e0b;"></span> Medium Severity</div>
-        <div class="legend-item"><span class="legend-color" style="background:#10b981;"></span> Low Severity</div>
+
+    <!-- Journey HUD (top bar) -->
+    <div id="journeyHUD" class="journey-hud">
+        <div class="hud-progress-bar"><div id="hudProgress" class="hud-progress-fill"></div></div>
+        <div class="hud-stats">
+            <div class="hud-stat">
+                <span class="hud-val" id="hudSpeed">--</span>
+                <span class="hud-lbl">km/h</span>
+            </div>
+            <div class="hud-divider"></div>
+            <div class="hud-stat">
+                <span class="hud-val" id="hudETA">--</span>
+                <span class="hud-lbl">min ETA</span>
+            </div>
+            <div class="hud-divider"></div>
+            <div class="hud-stat">
+                <span class="hud-val" id="hudDistLeft">--</span>
+                <span class="hud-lbl">km left</span>
+            </div>
+            <div class="hud-divider"></div>
+            <div class="hud-stat">
+                <span class="hud-val" id="hudPercent">0%</span>
+                <span class="hud-lbl">done</span>
+            </div>
+            <button class="hud-end-btn" onclick="endNavigation()">End Trip</button>
+        </div>
     </div>
-    
-    <!-- Floating Actions Panel -->
+
+    <!-- Turn-by-Turn Panel -->
+    <div id="tbtPanel" class="tbt-panel">
+        <div class="tbt-direction">
+            <i data-lucide="navigation" id="tbtIcon"></i>
+        </div>
+        <div class="tbt-info">
+            <div class="tbt-instruction" id="tbtInstruction">Follow the route</div>
+            <div class="tbt-street" id="tbtStreet">On your way</div>
+            <div class="tbt-distance" id="tbtDistance">-- m ahead</div>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend" id="mapLegend">
+        <strong>🔥 Risk Zones</strong>
+        <div class="legend-item"><span class="legend-color" style="background:#ef4444;"></span> High severity</div>
+        <div class="legend-item"><span class="legend-color" style="background:#f59e0b;"></span> Medium severity</div>
+        <div class="legend-item"><span class="legend-color" style="background:#10b981;"></span> Low severity</div>
+    </div>
+
+    <!-- Incidents Pill -->
+    <div id="incidentsPill" class="incidents-pill" onclick="toggleIncidentsDrawer()">
+        <i data-lucide="alert-triangle"></i>
+        <span id="incidentsPillText">0 incidents</span>
+    </div>
+
+    <!-- Incidents Drawer -->
+    <div id="incidentsDrawer" class="incidents-drawer">
+        <div class="risk-factors-title" style="margin-bottom:4px;">
+            <i data-lucide="alert-triangle" style="color:var(--incident-color);width:14px;height:14px;"></i>
+            Live Traffic Incidents
+        </div>
+        <div id="incidentsList"></div>
+    </div>
+
+    <!-- Share Toast -->
+    <div id="shareToast" class="share-toast">
+        <i data-lucide="check-circle"></i> Route link copied to clipboard!
+    </div>
+
+    <!-- Arrival Modal -->
+    <div id="arrivalModal" class="arrival-modal">
+        <div class="arrival-card">
+            <div class="arrival-icon">🏁</div>
+            <div class="arrival-title">You've Arrived!</div>
+            <div class="arrival-sub" id="arrivalSubtitle">Journey complete. Drive safe, always.</div>
+            <div class="arrival-stats">
+                <div class="arrival-stat-box">
+                    <div class="arrival-stat-val" id="arrivalDist">--</div>
+                    <div class="arrival-stat-lbl">km travelled</div>
+                </div>
+                <div class="arrival-stat-box">
+                    <div class="arrival-stat-val" id="arrivalTime">--</div>
+                    <div class="arrival-stat-lbl">min journey</div>
+                </div>
+            </div>
+            <button class="arrival-close-btn" onclick="closeArrivalModal()">Done &rarr;</button>
+        </div>
+    </div>
+
+    <!-- Floating Actions -->
     <div class="floating-actions">
         <div class="fab" id="liveLocFab" onclick="getUserLocation()" title="Use Live Location">
-            <i data-lucide="navigation"></i>
+            <i data-lucide="crosshair"></i>
         </div>
-        <div class="fab" id="speakRiskFab" onclick="speakNow()" title="Speak Current Risk">
+        <div class="fab" id="speakFab" onclick="speakNow()" title="Speak Risk Summary">
             <i data-lucide="volume-2"></i>
         </div>
-        <div class="fab" id="historyFab" onclick="toggleHistory()" title="View Trip History">
+        <div class="fab" id="gpsJourneyFab" onclick="toggleActiveJourney()" title="Start Live GPS Journey">
+            <i data-lucide="navigation-2" id="gpsJourneyFabIcon"></i>
+        </div>
+        <div class="fab" id="historyFab" onclick="toggleHistory()" title="Trip History">
             <i data-lucide="history"></i>
         </div>
         <div class="fab" id="clearFab" onclick="clearAll()" title="Clear Map">
             <i data-lucide="refresh-cw"></i>
         </div>
     </div>
-    
-    <!-- Sidebar Dashboard Drawer -->
-    <div class="sidebar">
-        <!-- Interactive Drawer grabber for mobile -->
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="mainSidebar">
         <div class="bottom-sheet-handle" onclick="toggleBottomSheet()"></div>
-        
         <div class="sidebar-header" onclick="toggleBottomSheetOnMobileHeader()">
             <h1>🚦 <span>Smart Traffic IQ</span></h1>
-            <div class="status-bar" id="status">
-                <i data-lucide="compass" style="width: 14px; height: 14px; flex-shrink: 0;"></i>
-                <span id="statusText">Configure route coordinates to start</span>
+            <div class="header-row">
+                <div class="status-bar" id="status">
+                    <span class="status-dot"></span>
+                    <span id="statusText">Configure route to start</span>
+                </div>
+                <button class="share-btn" id="shareBtn" onclick="shareRoute(); event.stopPropagation();" style="display:none;">
+                    <i data-lucide="share-2"></i> Share
+                </button>
             </div>
         </div>
-        
+
         <div class="sidebar-scroll">
-            <!-- Route Input Fields -->
+            <!-- Start Input -->
             <div class="form-group">
                 <label>📍 START POINT</label>
                 <div class="input-container">
                     <i data-lucide="map-pin" class="input-icon"></i>
                     <input type="text" id="start" placeholder="Type address or click map..." autocomplete="off">
-                    <button onclick="searchAddress('start'); event.stopPropagation();" class="inline-btn">Search</button>
+                    <button onclick="searchAddress('start'); event.stopPropagation();" class="inline-btn">Go</button>
                 </div>
             </div>
-            
+
+            <!-- End Input -->
             <div class="form-group">
                 <label>🏁 DESTINATION</label>
                 <div class="input-container">
                     <i data-lucide="flag" class="input-icon"></i>
                     <input type="text" id="end" placeholder="Type destination or click map..." autocomplete="off">
-                    <button onclick="searchAddress('end'); event.stopPropagation();" class="inline-btn">Search</button>
+                    <button onclick="searchAddress('end'); event.stopPropagation();" class="inline-btn">Go</button>
                 </div>
             </div>
-            
+
+            <!-- Email -->
             <div class="form-group">
-                <label>📧 Email for Alerts (Optional)</label>
+                <label>📧 EMAIL ALERT (Optional)</label>
                 <div class="input-container">
                     <i data-lucide="mail" class="input-icon"></i>
                     <input type="email" id="email" placeholder="driver@safetyalert.com">
                 </div>
             </div>
-            
-            <!-- Quick Parameter Selection Dropdowns -->
+
+            <!-- Quick Params -->
             <div class="params-grid">
                 <div class="form-group">
                     <label>🚗 Vehicle</label>
@@ -999,7 +512,6 @@
                         </select>
                     </div>
                 </div>
-                
                 <div class="form-group">
                     <label>⏰ Time</label>
                     <div class="select-wrapper">
@@ -1011,7 +523,6 @@
                         </select>
                     </div>
                 </div>
-                
                 <div class="form-group">
                     <label>🌤️ Weather</label>
                     <div class="select-wrapper">
@@ -1025,11 +536,11 @@
                 </div>
             </div>
 
-            <!-- Advanced ML Parameters Summary Dropdown -->
+            <!-- Advanced Panel -->
             <div class="advanced-panel">
                 <div class="advanced-header" onclick="toggleAdvancedPanel()">
-                    <span>⚙️ Advanced ML Model inputs</span>
-                    <i data-lucide="chevron-down" id="advChevron" style="width: 14px; height: 14px;"></i>
+                    <span>⚙️ Advanced ML Inputs</span>
+                    <i data-lucide="chevron-down" id="advChevron" style="width:14px;height:14px;"></i>
                 </div>
                 <div class="advanced-content" id="advContent">
                     <div class="form-group">
@@ -1037,14 +548,13 @@
                         <div class="select-wrapper">
                             <select id="junction_control">
                                 <option value="Not at junction or within 20 metres">Not at junction (Safe)</option>
-                                <option value="Give way or uncontrolled">Give way or uncontrolled</option>
-                                <option value="Auto traffic signal">Auto traffic signal</option>
+                                <option value="Give way or uncontrolled">Give way / uncontrolled</option>
+                                <option value="Auto traffic signal">Traffic signal</option>
                                 <option value="Stop sign">Stop sign</option>
-                                <option value="Authorised person">Authorised person control</option>
+                                <option value="Authorised person">Authorised person</option>
                             </select>
                         </div>
                     </div>
-
                     <div class="form-group">
                         <label>🛣️ Road Type</label>
                         <div class="select-wrapper">
@@ -1052,45 +562,39 @@
                                 <option value="Single carriageway">Single carriageway</option>
                                 <option value="Dual carriageway">Dual carriageway</option>
                                 <option value="Roundabout">Roundabout</option>
-                                <option value="One way street">One way street</option>
+                                <option value="One way street">One-way street</option>
                                 <option value="Slip road">Slip road</option>
                             </select>
                         </div>
                     </div>
-
                     <div class="form-group">
-                        <label>💦 Road Surface Condition</label>
+                        <label>💦 Road Surface</label>
                         <div class="select-wrapper">
                             <select id="road_surface">
                                 <option value="Dry">Dry</option>
                                 <option value="Wet or damp">Wet or damp</option>
                                 <option value="Frost or ice">Frost or ice</option>
                                 <option value="Snow">Snow</option>
-                                <option value="Flood over 3cm. deep">Flooding deep water</option>
+                                <option value="Flood over 3cm. deep">Flooding</option>
                             </select>
                         </div>
                     </div>
-
                     <div class="form-group">
-                        <label>🏡 Region Area</label>
+                        <label>🏡 Region</label>
                         <div class="select-wrapper">
                             <select id="urban_rural">
-                                <option value="Urban">Urban Corridor</option>
-                                <option value="Rural">Rural Country Highway</option>
+                                <option value="Urban">Urban</option>
+                                <option value="Rural">Rural</option>
                             </select>
                         </div>
                     </div>
-
                     <div class="form-group">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <label>⚡ Speed Limit</label>
-                        </div>
+                        <label>⚡ Speed Limit</label>
                         <div class="slider-group">
                             <input type="range" id="speed_limit" min="20" max="70" step="10" value="30" oninput="updateSliderVal(this.value)">
                             <span class="slider-value" id="speedVal">30 mph</span>
                         </div>
                     </div>
-
                     <div class="params-grid">
                         <div class="form-group">
                             <label>💥 Vehicles</label>
@@ -1103,93 +607,121 @@
                     </div>
                 </div>
             </div>
-            
-            <!-- Submit Button -->
+
+            <!-- Calculate Button -->
             <button onclick="calculateRoute()" class="primary-btn" id="calcBtn">
-                <i data-lucide="shield-alert"></i> Calculate Route & Predict Safety
+                <i data-lucide="shield-alert"></i> Analyse Route & Predict Safety
             </button>
-            
-            <!-- Voice Guidance Settings Row -->
+
+            <!-- Voice Controls -->
             <div class="voice-controls-row">
                 <span class="label-text">TTS Guidance:</span>
                 <button onclick="setVoice(true)" id="voiceOnBtn" class="voice-toggle-btn active">🔊 ON</button>
                 <button onclick="setVoice(false)" id="voiceOffBtn" class="voice-toggle-btn">🔇 OFF</button>
-                <button onclick="speakNow()" class="voice-toggle-btn" title="Re-narrate"><i data-lucide="play" style="width:12px; height:12px; display:inline;"></i> Narrate</button>
+                <button onclick="speakNow()" class="voice-toggle-btn" title="Re-narrate">
+                    <i data-lucide="play" style="width:11px;height:11px;display:inline;"></i> Say
+                </button>
             </div>
-            
-            <!-- Active Route Animation Control Panel -->
+
+            <!-- Journey Progress -->
+            <div id="journeyProgressSection" class="journey-progress-section">
+                <div class="jp-label">
+                    <span>Journey Progress</span>
+                    <span id="journeyProgressPct">0%</span>
+                </div>
+                <div class="jp-bar"><div class="jp-fill" id="journeyProgressFill"></div></div>
+            </div>
+
+            <!-- Simulation Controls -->
             <div id="journeyControls" class="journey-controls">
                 <button id="startJourneyBtn">
-                    <i data-lucide="play"></i>
-                    <span>Simulate Route</span>
+                    <i data-lucide="play"></i><span>Simulate</span>
                 </button>
                 <button id="pauseJourneyBtn">
-                    <i data-lucide="pause"></i>
-                    <span>Pause</span>
+                    <i data-lucide="pause"></i><span>Pause</span>
                 </button>
                 <button id="resetJourneyBtn">
-                    <i data-lucide="rotate-ccw"></i>
-                    <span>Reset</span>
+                    <i data-lucide="rotate-ccw"></i><span>Reset</span>
                 </button>
             </div>
-            
-            <!-- Safety Risk Assessment Results Panel -->
+
+            <!-- Live GPS Controls -->
+            <div id="activeJourneyControls" class="active-journey-controls">
+                <button id="liveJourneyToggleBtn" onclick="toggleActiveJourney()">
+                    <i data-lucide="navigation-2" id="liveJourneyIcon" style="color:var(--low-color);"></i>
+                    <span id="liveJourneyText">Start GPS</span>
+                </button>
+                <button id="cameraFollowBtn" onclick="toggleCameraFollow()">
+                    <i data-lucide="eye" id="cameraFollowIcon"></i>
+                    <span id="cameraFollowText">Follow: ON</span>
+                </button>
+            </div>
+
+            <!-- Risk Card -->
             <div id="riskCard" class="card risk-card">
                 <div class="risk-header">
                     <div id="riskBadge" class="severity-badge">LOW RISK</div>
                     <div class="confidence-indicator">
-                        Model Confidence: <span id="confidenceVal">75%</span>
-                        <div>
-                            <div class="confidence-bar"><div class="confidence-bar-fill" id="confidenceFill"></div></div>
-                        </div>
+                        Confidence: <span id="confidenceVal">75%</span>
+                        <div><div class="confidence-bar"><div class="confidence-bar-fill" id="confidenceFill"></div></div></div>
                     </div>
                 </div>
-                
                 <div class="score-display-row">
                     <div class="score-circle">
-                        <svg>
-                            <circle class="circle-bg" cx="34" cy="34" r="30"></circle>
-                            <circle class="circle-progress" id="scoreCircleFill" cx="34" cy="34" r="30"></circle>
-                        </svg>
-                        <div class="score-text" id="scoreText">42</div>
+                        <svg><circle class="circle-bg" cx="33" cy="33" r="29"></circle><circle class="circle-progress" id="scoreCircleFill" cx="33" cy="33" r="29"></circle></svg>
+                        <div class="score-text" id="scoreText">0</div>
                     </div>
                     <div class="score-info">
-                        <span class="score-label">Composite Risk Rating</span>
-                        <span class="score-desc" id="scoreDesc">Standard Route Risk profile</span>
+                        <span class="score-label">Composite Risk Score</span>
+                        <span class="score-desc" id="scoreDesc">ML safety assessment</span>
                     </div>
                 </div>
-                
-                <div class="route-info-grid" id="routeInfo">
-                    <!-- Dynamic properties -->
+                <div class="route-info-grid" id="routeInfo"></div>
+
+                <!-- Route Comparison -->
+                <div id="routesCompareSection" class="routes-compare-section">
+                    <div class="risk-factors-title">
+                        <i data-lucide="git-branch" style="color:var(--primary);width:13px;height:13px;"></i>
+                        Compare Available Routes
+                    </div>
+                    <div id="routesCompareList" style="display:flex;flex-direction:column;gap:7px;"></div>
                 </div>
-                
-                <div class="risk-factors-title">
-                    <i data-lucide="alert-triangle" style="color: var(--medium-color); width:14px; height:14px;"></i> ML Risk Factor Analysis
+
+                <div class="risk-factors-title" style="margin-top:12px;">
+                    <i data-lucide="alert-triangle" style="color:var(--medium-color);width:13px;height:13px;"></i>
+                    ML Risk Factor Analysis
                 </div>
-                <ul id="riskFactors" class="risk-factors-list">
-                    <!-- Dynamic list items -->
-                </ul>
-                
-                <div id="emailStatus" style="font-size:0.75rem; font-weight:700; color: var(--low-color); margin-top:10px; text-align:center;"></div>
+                <ul id="riskFactors" class="risk-factors-list"></ul>
+                <div id="emailStatus" style="font-size:0.73rem;font-weight:700;color:var(--low-color);margin-top:9px;text-align:center;"></div>
             </div>
-            
-            <!-- Open-Meteo Weather Widget -->
+
+            <!-- Risk Profile Chart -->
+            <div id="riskChartCard" class="card risk-chart-card">
+                <div class="risk-factors-title" style="margin-bottom:0;">
+                    <i data-lucide="activity" style="color:var(--primary);width:13px;height:13px;"></i>
+                    Route Risk Profile
+                </div>
+                <div class="risk-chart-wrapper">
+                    <canvas id="riskChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Weather Card -->
             <div id="weatherCard" class="card weather-card">
                 <div class="risk-factors-title">
-                    <i data-lucide="cloud-lightning" style="color: #60a5fa; width:14px; height:14px;"></i> Weather Conditions Forecast
+                    <i data-lucide="cloud-lightning" style="color:#60a5fa;width:13px;height:13px;"></i>
+                    Weather Forecast
                 </div>
-                <div id="weatherInfo" class="weather-grid">
-                    <!-- Dynamic weather cards -->
-                </div>
+                <div id="weatherInfo" class="weather-grid"></div>
             </div>
-            
-            <!-- TRIP LOG HISTORY PANEL -->
+
+            <!-- Trip History -->
             <div id="historyPanel" class="card history-panel">
-                <div class="risk-factors-title" style="justify-content: space-between; display: flex; align-items: center; margin-bottom: 0;">
-                    <span style="display: flex; align-items: center; gap: 6px;">
-                        <i data-lucide="history" style="color: var(--primary); width:14px; height:14px;"></i> Prediction Trip History
+                <div class="risk-factors-title" style="justify-content:space-between;display:flex;align-items:center;margin-bottom:0;">
+                    <span style="display:flex;align-items:center;gap:6px;">
+                        <i data-lucide="history" style="color:var(--primary);width:13px;height:13px;"></i> Trip History
                     </span>
-                    <button onclick="clearHistory()" style="background: transparent; border: none; color: var(--high-color); font-size: 0.72rem; font-weight: 800; cursor: pointer;">Delete Log</button>
+                    <button onclick="clearHistory()" style="background:transparent;border:none;color:var(--high-color);font-size:0.7rem;font-weight:800;cursor:pointer;">Clear</button>
                 </div>
                 <div id="historyList" class="history-list"></div>
             </div>
@@ -1198,623 +730,1007 @@
 </div>
 
 <script>
-    // ------------------- GLOBAL VARIABLES -------------------
-    let map, routeLayer, heatLayer, startMarker, endMarker;
-    let selectingStart = true;
-    let currentRouteData = null;
-    let voiceEnabled = true;
-    let currentUtterance = null;
-    
-    // Route trace simulation variables
-    let simulatedMarker = null;
-    let routeCoordsList = [];
-    let currentTraceIndex = 0;
-    let traceIntervalId = null;
-    let isTracePaused = false;
-    let cameraFollowsMarker = true;
+// =====================================================================
+// GLOBALS
+// =====================================================================
+let map, heatLayer, startMarker, endMarker;
+let selectingStart = true;
+let currentRouteData = null;
+let voiceEnabled = true;
+let currentUtterance = null;
 
-    // Accident hotspots derived from historical metrics
-    const HOTSPOTS = [
-        [28.6139, 77.2090, 0.95], [28.6300, 77.2200, 0.92], [28.5600, 77.3200, 0.88],
-        [19.0760, 72.8777, 0.90], [19.1000, 72.8500, 0.85], [12.9716, 77.5946, 0.82],
-        [22.5726, 88.3639, 0.80], [28.5000, 77.3000, 0.65], [28.4000, 77.2000, 0.60],
-        [13.0827, 80.2707, 0.58], [17.3850, 78.4867, 0.55], [26.9124, 75.7873, 0.52],
-        [26.8000, 78.0000, 0.20], [21.0000, 75.0000, 0.15], [18.0000, 76.0000, 0.12]
-    ];
+// Route state
+let allRoutes = [];
+let allRouteLayers = [];
+let incidentMarkers = [];
+let activeRouteIndex = 0;
+let routeCoordsList = [];
 
-    function initMap() {
-        // Initialize Leaflet map with coordinates centered on India
-        map = L.map('map', { zoomControl: false }).setView([20.5937, 78.9629], 5);
-        
-        // Re-position zoom buttons to top-right
-        L.control.zoom({ position: 'topright' }).addTo(map);
+// Simulation
+let simulatedMarker = null;
+let currentTraceIndex = 0;
+let traceIntervalId = null;
+let isTracePaused = false;
+let cameraFollowsMarker = true;
 
-        // CartoDB Dark Matter tile layer for premium visual look matching dark glass theme
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '© OpenStreetMap | TomTom traffic'
-        }).addTo(map);
-        
-        map.on('click', function(e) {
-            const lat = e.latlng.lat, lng = e.latlng.lng;
-            const coord = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-            if (selectingStart) {
-                setMarker('start', lat, lng, coord);
-                updateStatus('Start location set. Click map for Destination.', 'active-status');
-            } else {
-                setMarker('end', lat, lng, coord);
-                updateStatus('Destination set. Press Calculate Route.', 'active-status');
-            }
-            selectingStart = !selectingStart;
-        });
+// Live GPS
+let activeJourneyId = null;
+let userMarker = null;
+let userAccuracyCircle = null;
+let cameraFollowsUser = true;
+let warnedHotspots = {};
+let journeyStartTime = null;
+let journeyStartDist = 0;
+let lastUserPosition = null;
+let arrivedAtDestination = false;
 
-        addHeatmap();
-        setupAutocomplete();
-        
-        // Initialize Lucide icons on load
-        lucide.createIcons();
-    }
+// Chart
+let riskChartInstance = null;
 
-    function updateStatus(text, className = '') {
-        const textNode = document.getElementById('statusText');
-        const statusBar = document.getElementById('status');
-        textNode.textContent = text;
-        
-        statusBar.className = 'status-bar';
-        if (className) {
-            statusBar.classList.add(className);
-        }
-    }
+// TTS state machine
+const AppState = { IDLE:'idle', LOADING:'loading', CALCULATED:'calculated', NAVIGATING:'navigating', ARRIVED:'arrived' };
+let appState = AppState.IDLE;
 
-    function addHeatmap() {
-        if (heatLayer) map.removeLayer(heatLayer);
-        heatLayer = L.heatLayer(HOTSPOTS, {
-            radius: 35, blur: 20, maxZoom: 12, minOpacity: 0.4,
-            gradient: { 0.2: '#10b981', 0.5: '#f59e0b', 0.9: '#ef4444' }
-        }).addTo(map);
-    }
+// Accident hotspots (lat, lon, intensity)
+const HOTSPOTS = [
+    [28.6139,77.2090,0.95],[28.6300,77.2200,0.92],[28.5600,77.3200,0.88],
+    [19.0760,72.8777,0.90],[19.1000,72.8500,0.85],[12.9716,77.5946,0.82],
+    [22.5726,88.3639,0.80],[28.5000,77.3000,0.65],[28.4000,77.2000,0.60],
+    [13.0827,80.2707,0.58],[17.3850,78.4867,0.55],[26.9124,75.7873,0.52],
+    [23.0225,72.5714,0.48],[18.5204,73.8567,0.45],[11.0168,76.9558,0.38],
+    [26.8000,78.0000,0.20],[21.0000,75.0000,0.15]
+];
 
-    function setMarker(type, lat, lng, label) {
-        const marker = (type === 'start') ? startMarker : endMarker;
-        if (marker) map.removeLayer(marker);
-        
-        // Custom Leaflet styling for start/end points
-        const color = type === 'start' ? '#3b82f6' : '#a78bfa';
-        const customIcon = L.divIcon({
-            html: `<div style="background:${color}; width:14px; height:14px; border:2.5px solid white; border-radius:50%; box-shadow:0 0 10px rgba(0,0,0,0.5);"></div>`,
-            iconSize: [14, 14],
-            className: ''
-        });
+// Maneuver -> icon map
+const MANEUVER_ICONS = {
+    'TURN_RIGHT':'corner-down-right','TURN_LEFT':'corner-down-left',
+    'KEEP_RIGHT':'chevron-right','KEEP_LEFT':'chevron-left',
+    'ROUNDABOUT_RIGHT':'rotate-cw','ROUNDABOUT_LEFT':'rotate-ccw',
+    'STRAIGHT':'arrow-up','ARRIVE':'flag','DEPART':'navigation',
+    'DEFAULT':'navigation'
+};
 
-        const newMarker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
-        newMarker.bindPopup(type === 'start' ? '📍 Start Location' : '🏁 Destination Location').openPopup();
-        
-        if (type === 'start') {
-            startMarker = newMarker;
-            document.getElementById('start').value = label;
+// =====================================================================
+// MAP INIT
+// =====================================================================
+function initMap() {
+    map = L.map('map', { zoomControl: false }).setView([20.5937, 78.9629], 5);
+    L.control.zoom({ position: 'topright' }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap | CartoDB | TomTom'
+    }).addTo(map);
+
+    map.on('click', function(e) {
+        const lat = e.latlng.lat, lng = e.latlng.lng;
+        const coord = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        if (selectingStart) {
+            setMarker('start', lat, lng, coord);
+            updateStatus('Start set. Click map for Destination.', 'active-status');
         } else {
-            endMarker = newMarker;
-            document.getElementById('end').value = label;
+            setMarker('end', lat, lng, coord);
+            updateStatus('Destination set. Press Analyse Route.', 'active-status');
         }
-    }
-
-    // ------------------- ADVANCED PANEL AND SLIDER CONTROLS -------------------
-    function toggleAdvancedPanel() {
-        const content = document.getElementById('advContent');
-        const chevron = document.getElementById('advChevron');
-        content.classList.toggle('expanded');
-        
-        if (content.classList.contains('expanded')) {
-            chevron.setAttribute('data-lucide', 'chevron-up');
-        } else {
-            chevron.setAttribute('data-lucide', 'chevron-down');
-        }
-        lucide.createIcons();
-    }
-
-    function updateSliderVal(val) {
-        document.getElementById('speedVal').textContent = `${val} mph`;
-    }
-
-    function syncWeatherToSurface() {
-        const weather = document.getElementById('weather').value;
-        const roadSurface = document.getElementById('road_surface');
-        
-        if (weather === 'Rain') {
-            roadSurface.value = 'Wet or damp';
-        } else if (weather === 'Snow') {
-            roadSurface.value = 'Snow';
-        } else if (weather === 'Fog') {
-            roadSurface.value = 'Wet or damp';
-        } else {
-            roadSurface.value = 'Dry';
-        }
-    }
-
-    // ------------------- MOBILE BOTTOM SHEET DRAWER CONTROLS -------------------
-    function toggleBottomSheet() {
-        const sidebar = document.querySelector('.sidebar');
-        sidebar.classList.toggle('collapsed');
-    }
-
-    function toggleBottomSheetOnMobileHeader() {
-        if (window.innerWidth < 768) {
-            toggleBottomSheet();
-        }
-    }
-
-    function expandBottomSheet() {
-        const sidebar = document.querySelector('.sidebar');
-        if (window.innerWidth < 768) {
-            sidebar.classList.remove('collapsed');
-        }
-    }
-
-    // ------------------- GEOGRAPHIC API PROXIES -------------------
-    function setupAutocomplete() {
-        const startInput = document.getElementById('start');
-        const endInput = document.getElementById('end');
-        let timeoutId = null;
-
-        function attach(input, pointType) {
-            input.addEventListener('input', function() {
-                const query = this.value.trim();
-                if (query.length < 2) return;
-                if (timeoutId) clearTimeout(timeoutId);
-                timeoutId = setTimeout(async () => {
-                    try {
-                        const res = await fetch(`/autocomplete?query=${encodeURIComponent(query)}`);
-                        const suggestions = await res.json();
-                        if (!suggestions.length) return;
-                        const datalistId = `${pointType}-datalist`;
-                        let datalist = document.getElementById(datalistId);
-                        if (!datalist) {
-                            datalist = document.createElement('datalist');
-                            datalist.id = datalistId;
-                            input.setAttribute('list', datalistId);
-                            input.parentNode.appendChild(datalist);
-                        }
-                        datalist.innerHTML = suggestions.map(s => `<option value="${s.display.replace(/"/g, '&quot;')}">`).join('');
-                    } catch(err) { console.error(err); }
-                }, 300);
-            });
-
-            input.addEventListener('change', async function() {
-                const value = this.value;
-                if (!value) return;
-                try {
-                    const res = await fetch('/geocode', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ address: value })
-                    });
-                    const data = await res.json();
-                    if (data.error) return;
-                    setMarker(pointType, data.lat, data.lon, value);
-                    if (pointType === 'start') selectingStart = false;
-                    else selectingStart = true;
-                } catch (e) {
-                    console.error("Geocoding failed", e);
-                }
-            });
-        }
-        attach(startInput, 'start');
-        attach(endInput, 'end');
-    }
-
-    async function searchAddress(pointType) {
-        const addr = document.getElementById(pointType).value.trim();
-        if (!addr) { alert("Enter an address first"); return; }
-        updateStatus('Geocoding coordinates...', 'active-status');
-        try {
-            const resp = await fetch('/geocode', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address: addr })
-            });
-            const data = await resp.json();
-            if (data.error) throw new Error(data.error);
-            setMarker(pointType, data.lat, data.lon, addr);
-            if (pointType === 'start') selectingStart = false;
-            else selectingStart = true;
-            updateStatus(`${pointType.toUpperCase()} position resolved`, 'active-status');
-        } catch (err) {
-            alert("Address not found. Please try entering a city or landmark.");
-            updateStatus('Address lookup failed');
-        }
-    }
-
-    function getUserLocation() {
-        if (!navigator.geolocation) { alert("Geolocation not supported by your browser"); return; }
-        updateStatus("Requesting satellite GPS coordinates...", "active-status");
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                const lat = pos.coords.latitude, lng = pos.coords.longitude;
-                setMarker('start', lat, lng, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-                selectingStart = false;
-                updateStatus("Start coordinates mapped. Select destination.", "active-status");
-                map.setView([lat, lng], 14);
-            },
-            (err) => { alert("Location mapping error: " + err.message); }
-        );
-    }
-
-    // ------------------- TRIP LOG (localStorage) -------------------
-    function saveTripToHistory(start, end, riskLevel, score, distance, duration) {
-        let history = JSON.parse(localStorage.getItem('tripHistory') || '[]');
-        history.unshift({
-            id: Date.now(),
-            start, end,
-            risk: riskLevel,
-            score,
-            distance: distance.toFixed(1),
-            duration: duration.toFixed(0),
-            date: new Date().toLocaleDateString()
-        });
-        if (history.length > 10) history.pop();
-        localStorage.setItem('tripHistory', JSON.stringify(history));
-    }
-
-    function toggleHistory() {
-        const panel = document.getElementById('historyPanel');
-        const fab = document.getElementById('historyFab');
-        if (panel.style.display === 'block') {
-            panel.style.display = 'none';
-            fab.classList.remove('active');
-        } else {
-            showHistory();
-            panel.style.display = 'block';
-            fab.classList.add('active');
-            panel.scrollIntoView({ behavior: 'smooth' });
-        }
-    }
-
-    function showHistory() {
-        const historyDiv = document.getElementById('historyList');
-        let history = JSON.parse(localStorage.getItem('tripHistory') || '[]');
-        if (history.length === 0) {
-            historyDiv.innerHTML = "<div style='font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 12px 0;'>No previous safety logs found.</div>";
-        } else {
-            historyDiv.innerHTML = history.map(t => {
-                const badgeClass = `badge-${t.risk}`;
-                return `
-                <div class="history-item" onclick="restoreTrip('${t.start.replace(/'/g, "\\'")}', '${t.end.replace(/'/g, "\\'")}')">
-                    <div class="history-item-header">
-                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; font-weight:600;">
-                            ${t.start.split(',')[0]} → ${t.end.split(',')[0]}
-                        </span>
-                        <span class="history-badge ${badgeClass}">${t.risk}</span>
-                    </div>
-                    <div class="history-item-details">
-                        <span>${t.distance} km | ${t.duration} mins</span>
-                        <span>${t.date}</span>
-                    </div>
-                </div>
-                `;
-            }).join('');
-        }
-    }
-
-    function restoreTrip(start, end) {
-        document.getElementById('start').value = start;
-        document.getElementById('end').value = end;
-        document.getElementById('historyPanel').style.display = 'none';
-        document.getElementById('historyFab').classList.remove('active');
-        calculateRoute();
-    }
-
-    function clearHistory() {
-        if (confirm("Reset local safety log history?")) {
-            localStorage.removeItem('tripHistory');
-            document.getElementById('historyList').innerHTML = "";
-            document.getElementById('historyPanel').style.display = 'none';
-            document.getElementById('historyFab').classList.remove('active');
-        }
-    }
-
-    // ------------------- ML ROUTE SAFETY COMPUTATIONS -------------------
-    async function calculateRoute() {
-        const start = document.getElementById('start').value;
-        const end = document.getElementById('end').value;
-        if (!start || !end) { alert("Configure both starting and destination points."); return; }
-
-        const calcBtn = document.getElementById('calcBtn');
-        calcBtn.innerHTML = "<i class='loader' style='animation: spin 1s linear infinite;'></i> Processing ML Assessment...";
-        calcBtn.disabled = true;
-
-        const payload = {
-            start, end,
-            vehicle: document.getElementById('vehicle').value,
-            time: document.getElementById('time').value,
-            weather: document.getElementById('weather').value,
-            email: document.getElementById('email').value,
-            
-            // Advanced ML fields
-            speed_limit: document.getElementById('speed_limit').value,
-            junction_control: document.getElementById('junction_control').value,
-            road_type: document.getElementById('road_type').value,
-            road_surface: document.getElementById('road_surface').value,
-            urban_rural: document.getElementById('urban_rural').value,
-            num_vehicles: document.getElementById('num_vehicles').value,
-            num_casualties: document.getElementById('num_casualties').value
-        };
-
-        try {
-            const resp = await fetch('/api/route', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await resp.json();
-            if (data.error) throw new Error(data.error);
-
-            const route = data.route;
-            const risk = data.risk;
-            currentRouteData = { distance: route.distance_km, duration: route.duration_min, risk };
-
-            // Render route polyline on Leaflet
-            if (routeLayer) map.removeLayer(routeLayer);
-            routeLayer = L.polyline(route.points, { 
-                color: '#3b82f6', 
-                weight: 6, 
-                opacity: 0.85,
-                lineCap: 'round',
-                lineJoin: 'round'
-            }).addTo(map);
-            map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
-
-            // Store coords for animation
-            routeCoordsList = route.points.map(p => L.latLng(p[0], p[1]));
-
-            // Reset trace animation
-            stopJourneyTrace();
-
-            // Display journey animate strip
-            document.getElementById('journeyControls').style.display = 'flex';
-
-            // Show risk details dashboard
-            const riskCard = document.getElementById('riskCard');
-            riskCard.style.display = 'block';
-            riskCard.className = `card risk-card glow-${risk.level}`;
-
-            // Update badge + gauges
-            const badge = document.getElementById('riskBadge');
-            badge.textContent = `${risk.level} RISK`;
-            badge.className = `severity-badge badge-${risk.level}`;
-
-            // Confidence display
-            document.getElementById('confidenceVal').textContent = `${risk.confidence}%`;
-            document.getElementById('confidenceFill').style.width = `${risk.confidence}%`;
-
-            // Risk Score circle rendering
-            document.getElementById('scoreText').textContent = risk.score;
-            const circumference = 2 * Math.PI * 30; // r=30
-            const offset = circumference - (risk.score / 100) * circumference;
-            document.getElementById('scoreCircleFill').style.strokeDashoffset = offset;
-            
-            // Set circle progress color
-            const circleFill = document.getElementById('scoreCircleFill');
-            if (risk.level === 'HIGH') {
-                circleFill.style.stroke = 'var(--high-color)';
-            } else if (risk.level === 'MEDIUM') {
-                circleFill.style.stroke = 'var(--medium-color)';
-            } else {
-                circleFill.style.stroke = 'var(--low-color)';
-            }
-
-            document.getElementById('scoreDesc').textContent = `Safety index indicates ${risk.severity.toLowerCase()} accident potential.`;
-
-            // Route Details grid
-            document.getElementById('routeInfo').innerHTML = `
-                <div class="route-info-item"><i data-lucide="milestone"></i> <span>${route.distance_km.toFixed(1)} km</span></div>
-                <div class="route-info-item"><i data-lucide="timer"></i> <span>${route.duration_min.toFixed(0)} mins</span></div>
-                <div class="route-info-item" style="grid-column: span 2;"><i data-lucide="gauge"></i> <span>Est. Traffic Delay: ${route.traffic_delay_min.toFixed(0)} min</span></div>
-            `;
-
-            // Render risk factors lists
-            let factorsHtml = "";
-            risk.factors.forEach(f => {
-                const isAlert = f.includes('🏍️') || f.includes('⚡') || f.includes('🌧️') || f.includes('🌫️') || f.includes('⚠️');
-                factorsHtml += `<li class="${isAlert ? 'factor-alert' : ''}"><i data-lucide="circle-slash" style="width:12px; height:12px; flex-shrink: 0; margin-top:2px;"></i><span>${f}</span></li>`;
-            });
-            document.getElementById('riskFactors').innerHTML = factorsHtml;
-
-            if (data.email_sent) {
-                document.getElementById('emailStatus').innerHTML = "✅ Defensive routing guidelines emailed!";
-            } else {
-                document.getElementById('emailStatus').innerHTML = "";
-            }
-
-            // Weather Widget display
-            if (data.weather_start && data.weather_end) {
-                document.getElementById('weatherCard').style.display = 'block';
-                document.getElementById('weatherInfo').innerHTML = `
-                    <div class="weather-box">
-                        <div class="weather-box-name">Start Weather</div>
-                        <div class="weather-box-val">
-                            🌡️ ${data.weather_start.temp}°C<br>
-                            💨 ${data.weather_start.wind} km/h<br>
-                            ☁️ ${data.weather_start.desc}
-                        </div>
-                    </div>
-                    <div class="weather-box">
-                        <div class="weather-box-name">Destination</div>
-                        <div class="weather-box-val">
-                            🌡️ ${data.weather_end.temp}°C<br>
-                            💨 ${data.weather_end.wind} km/h<br>
-                            ☁️ ${data.weather_end.desc}
-                        </div>
-                    </div>
-                `;
-            }
-
-            // Save details to trip history log
-            saveTripToHistory(start, end, risk.level, risk.score, route.distance_km, route.duration_min);
-
-            // Re-render Lucide icons
-            lucide.createIcons();
-
-            // Mobile bottom sheet auto-expand so user can see details
-            expandBottomSheet();
-            updateStatus('Model analysis computed successfully', 'active-status');
-
-            // Text-To-Speech alert narration
-            if (voiceEnabled) {
-                let msg = `AI Route assessment completed. This trip has a ${risk.level.toLowerCase()} risk rating, with a score of ${risk.score}. The model predicts ${risk.severity.toLowerCase()} accident severity. Stay alert and drive safely.`;
-                speakMessage(msg);
-            }
-        } catch (err) {
-            alert(`Calculation failed: ${err.message}`);
-            updateStatus('Prediction calculation error');
-        } finally {
-            calcBtn.innerHTML = "<i data-lucide='shield-alert'></i> Calculate Route & Predict Safety";
-            calcBtn.disabled = false;
-            lucide.createIcons();
-        }
-    }
-
-    // ------------------- TRACE VEHICLE SIMULATION -------------------
-    function startJourneyTrace() {
-        if (!routeCoordsList || routeCoordsList.length === 0) return;
-        
-        if (simulatedMarker) {
-            map.removeLayer(simulatedMarker);
-            simulatedMarker = null;
-        }
-
-        const icon = L.divIcon({
-            html: '<div></div>',
-            iconSize: [18, 18],
-            className: 'moving-marker'
-        });
-
-        currentTraceIndex = 0;
-        isTracePaused = false;
-
-        simulatedMarker = L.marker(routeCoordsList[0], { icon: icon }).addTo(map);
-        simulatedMarker.bindPopup("🚨 Simulated vehicle actively driving route").openPopup();
-
-        // Start animating steps
-        clearInterval(traceIntervalId);
-        traceIntervalId = setInterval(traceStep, 150); // Tick speed
-        
-        document.getElementById('startJourneyBtn').querySelector('span').textContent = 'Restart';
-        updateStatus("Driving simulation started...", "active-status");
-    }
-
-    function traceStep() {
-        if (isTracePaused) return;
-
-        if (currentTraceIndex >= routeCoordsList.length) {
-            stopJourneyTrace();
-            speakMessage("Simulated vehicle arrived at destination.");
-            updateStatus("Simulation finished", "active-status");
-            return;
-        }
-
-        const nextPoint = routeCoordsList[currentTraceIndex];
-        simulatedMarker.setLatLng(nextPoint);
-
-        if (cameraFollowsMarker) {
-            map.panTo(nextPoint);
-        }
-
-        currentTraceIndex++;
-    }
-
-    function pauseJourneyTrace() {
-        if (!simulatedMarker) return;
-        isTracePaused = !isTracePaused;
-        const pauseBtn = document.getElementById('pauseJourneyBtn');
-        if (isTracePaused) {
-            pauseBtn.querySelector('span').textContent = 'Resume';
-            updateStatus("Simulation paused", "active-status");
-        } else {
-            pauseBtn.querySelector('span').textContent = 'Pause';
-            updateStatus("Simulation resumed", "active-status");
-        }
-    }
-
-    function stopJourneyTrace() {
-        clearInterval(traceIntervalId);
-        if (simulatedMarker) {
-            map.removeLayer(simulatedMarker);
-            simulatedMarker = null;
-        }
-        document.getElementById('startJourneyBtn').querySelector('span').textContent = 'Simulate Route';
-        document.getElementById('pauseJourneyBtn').querySelector('span').textContent = 'Pause';
-        isTracePaused = false;
-    }
-
-    // Attach simulation buttons
-    document.getElementById('startJourneyBtn').addEventListener('click', startJourneyTrace);
-    document.getElementById('pauseJourneyBtn').addEventListener('click', pauseJourneyTrace);
-    document.getElementById('resetJourneyBtn').addEventListener('click', () => {
-        stopJourneyTrace();
-        updateStatus("Simulation reset", "active-status");
+        selectingStart = !selectingStart;
     });
 
-    // ------------------- TEXT-TO-SPEECH (TTS) -------------------
-    function speakMessage(msg) {
-        if (!voiceEnabled) return;
-        if (currentUtterance) window.speechSynthesis.cancel();
-        currentUtterance = new SpeechSynthesisUtterance(msg);
-        currentUtterance.rate = 0.95;
-        currentUtterance.onend = () => { currentUtterance = null; };
-        window.speechSynthesis.speak(currentUtterance);
+    addHeatmap();
+    setupAutocomplete();
+    checkURLParams();
+    lucide.createIcons();
+}
+
+function setState(newState) {
+    appState = newState;
+    const hud = document.getElementById('journeyHUD');
+    const tbt = document.getElementById('tbtPanel');
+    const sidebar = document.getElementById('mainSidebar');
+
+    if (newState === AppState.NAVIGATING) {
+        hud.classList.add('visible');
+        tbt.classList.add('visible');
+        if (window.innerWidth < 768) sidebar.classList.add('nav-mode');
+    } else {
+        hud.classList.remove('visible');
+        tbt.classList.remove('visible');
+        sidebar.classList.remove('nav-mode');
     }
-    
-    function setVoice(enabled) { 
-        voiceEnabled = enabled; 
-        if (enabled) {
-            speakMessage("Voice alerts enabled"); 
-            document.getElementById('voiceOnBtn').classList.add('active');
-            document.getElementById('voiceOffBtn').classList.remove('active');
-            updateStatus("Voice guidelines active", "active-status");
-        } else {
-            if (window.speechSynthesis.speaking) window.speechSynthesis.cancel(); 
-            document.getElementById('voiceOnBtn').classList.remove('active');
-            document.getElementById('voiceOffBtn').classList.add('active');
-            updateStatus("Voice guidelines muted");
-        }
+}
+
+// =====================================================================
+// MAP UTILS
+// =====================================================================
+function addHeatmap() {
+    if (heatLayer) map.removeLayer(heatLayer);
+    heatLayer = L.heatLayer(HOTSPOTS, {
+        radius: 35, blur: 20, maxZoom: 12, minOpacity: 0.4,
+        gradient: { 0.2: '#10b981', 0.5: '#f59e0b', 0.9: '#ef4444' }
+    }).addTo(map);
+}
+
+function setMarker(type, lat, lng, label) {
+    const existing = (type === 'start') ? startMarker : endMarker;
+    if (existing) map.removeLayer(existing);
+    const color = type === 'start' ? '#3b82f6' : '#a78bfa';
+    const icon = L.divIcon({
+        html: `<div style="background:${color};width:14px;height:14px;border:2.5px solid white;border-radius:50%;box-shadow:0 0 10px rgba(0,0,0,0.6);"></div>`,
+        iconSize: [14, 14], className: ''
+    });
+    const marker = L.marker([lat, lng], { icon }).addTo(map);
+    marker.bindPopup(type === 'start' ? '📍 Start Location' : '🏁 Destination').openPopup();
+    if (type === 'start') { startMarker = marker; document.getElementById('start').value = label; }
+    else { endMarker = marker; document.getElementById('end').value = label; }
+}
+
+function updateStatus(text, cls = '') {
+    document.getElementById('statusText').textContent = text;
+    const sb = document.getElementById('status');
+    sb.className = 'status-bar' + (cls ? ' ' + cls : '');
+}
+
+// =====================================================================
+// AUTOCOMPLETE & GEOCODING
+// =====================================================================
+function setupAutocomplete() {
+    ['start', 'end'].forEach(type => {
+        const input = document.getElementById(type);
+        let tid = null;
+        input.addEventListener('input', function() {
+            const q = this.value.trim();
+            if (q.length < 2) return;
+            clearTimeout(tid);
+            tid = setTimeout(async () => {
+                try {
+                    const res = await fetch(`/autocomplete?query=${encodeURIComponent(q)}`);
+                    const sug = await res.json();
+                    if (!sug.length) return;
+                    const dlId = `${type}-dl`;
+                    let dl = document.getElementById(dlId);
+                    if (!dl) { dl = document.createElement('datalist'); dl.id = dlId; input.setAttribute('list', dlId); input.parentNode.appendChild(dl); }
+                    dl.innerHTML = sug.map(s => `<option value="${s.display.replace(/"/g,'&quot;')}">`).join('');
+                } catch(e) {}
+            }, 280);
+        });
+        input.addEventListener('change', async function() {
+            const v = this.value;
+            if (!v) return;
+            try {
+                const res = await fetch('/geocode', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({address:v}) });
+                const d = await res.json();
+                if (!d.error) { setMarker(type, d.lat, d.lon, v); if (type==='start') selectingStart=false; else selectingStart=true; }
+            } catch(e) {}
+        });
+    });
+}
+
+async function searchAddress(type) {
+    const addr = document.getElementById(type).value.trim();
+    if (!addr) { alert('Enter an address first'); return; }
+    updateStatus('Resolving coordinates...', 'active-status');
+    try {
+        const resp = await fetch('/geocode', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({address:addr}) });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        setMarker(type, data.lat, data.lon, addr);
+        if (type === 'start') selectingStart = false; else selectingStart = true;
+        updateStatus(`${type.toUpperCase()} location resolved`, 'active-status');
+    } catch(err) {
+        alert('Address not found. Try a city or landmark name.');
+        updateStatus('Address lookup failed', 'error-status');
     }
-    
-    function speakNow() {
-        if (!currentRouteData) {
-            speakMessage("No active route calculated to predict.");
-        } else {
-            const risk = currentRouteData.risk;
-            speakMessage(`Route assessment alert. Safety score is ${risk.score}. Risk level is ${risk.level.toLowerCase()}, predicting ${risk.severity.toLowerCase()} accident severity.`);
+}
+
+function getUserLocation() {
+    if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+    updateStatus('Acquiring GPS signal...', 'active-status');
+    navigator.geolocation.getCurrentPosition(pos => {
+        const lat = pos.coords.latitude, lng = pos.coords.longitude;
+        setMarker('start', lat, lng, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+        selectingStart = false;
+        map.setView([lat, lng], 14);
+        updateStatus('Live position set as start.', 'active-status');
+    }, err => { alert('GPS error: ' + err.message); updateStatus('GPS failed', 'error-status'); });
+}
+
+function checkURLParams() {
+    const params = new URLSearchParams(window.location.search);
+    const from = params.get('from'), to = params.get('to');
+    const vehicle = params.get('vehicle');
+    if (from) document.getElementById('start').value = from;
+    if (to) document.getElementById('end').value = to;
+    if (vehicle) document.getElementById('vehicle').value = vehicle;
+    if (from && to) setTimeout(() => calculateRoute(), 800);
+}
+
+// =====================================================================
+// MAIN ROUTE CALCULATION
+// =====================================================================
+async function calculateRoute() {
+    const start = document.getElementById('start').value.trim();
+    const end = document.getElementById('end').value.trim();
+    if (!start || !end) { alert('Enter both start and destination.'); return; }
+
+    setState(AppState.LOADING);
+    const calcBtn = document.getElementById('calcBtn');
+    calcBtn.innerHTML = '<span class="spinner"></span> Computing ML Assessment...';
+    calcBtn.disabled = true;
+    updateStatus('Querying TomTom + ML model...', 'active-status');
+
+    const payload = {
+        start, end,
+        vehicle: document.getElementById('vehicle').value,
+        time: document.getElementById('time').value,
+        weather: document.getElementById('weather').value,
+        email: document.getElementById('email').value,
+        speed_limit: document.getElementById('speed_limit').value,
+        junction_control: document.getElementById('junction_control').value,
+        road_type: document.getElementById('road_type').value,
+        road_surface: document.getElementById('road_surface').value,
+        urban_rural: document.getElementById('urban_rural').value,
+        num_vehicles: document.getElementById('num_vehicles').value,
+        num_casualties: document.getElementById('num_casualties').value
+    };
+
+    try {
+        const resp = await fetch('/api/route', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+
+        allRoutes = data.routes;
+        allRouteLayers.forEach(l => map.removeLayer(l));
+        allRouteLayers = [];
+        incidentMarkers.forEach(m => map.removeLayer(m));
+        incidentMarkers = [];
+
+        // Draw all routes
+        allRoutes.forEach((r, idx) => {
+            const isPrimary = idx === 0;
+            const riskColor = {'LOW':'#10b981','MEDIUM':'#f59e0b','HIGH':'#ef4444'}[r.risk.level] || '#3b82f6';
+            const color = isPrimary ? riskColor : '#475569';
+            const layer = L.polyline(r.points, {
+                color, weight: isPrimary ? 6 : 4, opacity: isPrimary ? 0.9 : 0.5,
+                dashArray: isPrimary ? null : '8, 12', lineCap:'round', lineJoin:'round'
+            }).addTo(map);
+            layer.on('click', () => selectActiveRoute(idx));
+            allRouteLayers.push(layer);
+        });
+
+        if (allRouteLayers.length > 0) {
+            map.fitBounds(new L.featureGroup(allRouteLayers).getBounds(), { padding:[60,60] });
         }
+
+        // Compute bbox for incidents
+        const allPoints = allRoutes.flatMap(r => r.points);
+        const lats = allPoints.map(p => p[0]);
+        const lons = allPoints.map(p => p[1]);
+        const bbox = [Math.min(...lats)-0.05, Math.min(...lons)-0.05, Math.max(...lats)+0.05, Math.max(...lons)+0.05];
+        loadIncidents(bbox);
+
+        // Route comparison
+        const cmpSection = document.getElementById('routesCompareSection');
+        const cmpList = document.getElementById('routesCompareList');
+        if (allRoutes.length > 1) {
+            cmpSection.style.display = 'block';
+            cmpList.innerHTML = allRoutes.map((r, idx) => `
+                <div class="route-selection-item ${idx===0?'selected-route':''}" id="route-sel-${idx}" onclick="selectActiveRoute(${idx}); event.stopPropagation();">
+                    <div class="route-path-info">
+                        <span class="route-path-title">Route ${idx+1} ${idx===0?'&#x2713; Recommended':''}</span>
+                        <span class="route-path-meta">${r.distance_km.toFixed(1)} km &bull; ${Math.round(r.duration_min)} min &bull; +${Math.round(r.traffic_delay_min)} min delay</span>
+                    </div>
+                    <div class="route-path-badge">
+                        <span class="history-badge badge-${r.risk.level}">${r.risk.level} ${r.risk.score}</span>
+                    </div>
+                </div>`).join('');
+        } else {
+            cmpSection.style.display = 'none';
+        }
+
+        // Weather
+        if (data.weather_start && data.weather_end) {
+            document.getElementById('weatherCard').style.display = 'block';
+            document.getElementById('weatherInfo').innerHTML = `
+                <div class="weather-box">
+                    <div class="weather-box-name">Start Weather</div>
+                    <div class="weather-box-val">🌡️ ${data.weather_start.temp}°C<br>💨 ${data.weather_start.wind} km/h<br>☁️ ${data.weather_start.desc}</div>
+                </div>
+                <div class="weather-box">
+                    <div class="weather-box-name">Destination</div>
+                    <div class="weather-box-val">🌡️ ${data.weather_end.temp}°C<br>💨 ${data.weather_end.wind} km/h<br>☁️ ${data.weather_end.desc}</div>
+                </div>`;
+        }
+
+        // Select first route, show controls
+        selectActiveRoute(0);
+        setState(AppState.CALCULATED);
+
+        // Show simulation controls
+        document.getElementById('journeyControls').style.display = 'flex';
+        document.getElementById('activeJourneyControls').style.display = 'flex';
+        document.getElementById('journeyProgressSection').style.display = 'block';
+
+        // Show share btn
+        document.getElementById('shareBtn').style.display = 'flex';
+
+        // Save history
+        saveTripToHistory(start, end, allRoutes[0].risk.level, allRoutes[0].risk.score, allRoutes[0].distance_km, allRoutes[0].duration_min);
+
+        if (data.email_sent) document.getElementById('emailStatus').innerHTML = '&#9989; Risk report emailed to you!';
+        else document.getElementById('emailStatus').innerHTML = '';
+
+        // Draw chart
+        renderRiskChart(allRoutes);
+
+        expandBottomSheet();
+        updateStatus('Analysis complete. Route assessed.', 'active-status');
+        lucide.createIcons();
+
+    } catch(err) {
+        alert(`Route calculation failed: ${err.message}`);
+        updateStatus('Calculation error', 'error-status');
+        setState(AppState.IDLE);
+    } finally {
+        calcBtn.innerHTML = '<i data-lucide="shield-alert"></i> Analyse Route & Predict Safety';
+        calcBtn.disabled = false;
+        lucide.createIcons();
+    }
+}
+
+function selectActiveRoute(idx) {
+    if (idx < 0 || idx >= allRoutes.length) return;
+    activeRouteIndex = idx;
+    const route = allRoutes[idx];
+    const risk = route.risk;
+    currentRouteData = { distance: route.distance_km, duration: route.duration_min, risk };
+    routeCoordsList = route.points.map(p => L.latLng(p[0], p[1]));
+
+    // Update polyline styles
+    const riskColors = { LOW:'#10b981', MEDIUM:'#f59e0b', HIGH:'#ef4444' };
+    allRouteLayers.forEach((layer, i) => {
+        if (i === idx) {
+            const c = riskColors[allRoutes[i].risk.level] || '#3b82f6';
+            layer.setStyle({ color: c, weight: 6, opacity: 0.9, dashArray: null });
+            layer.bringToFront();
+        } else {
+            layer.setStyle({ color: '#475569', weight: 4, opacity: 0.5, dashArray: '8, 12' });
+        }
+    });
+
+    // Update comparison selection UI
+    allRoutes.forEach((_, i) => {
+        const el = document.getElementById(`route-sel-${i}`);
+        if (el) { el.classList.toggle('selected-route', i === idx); }
+    });
+
+    // Update end marker
+    if (endMarker) {
+        const last = route.points[route.points.length - 1];
+        endMarker.setLatLng(last);
     }
 
-    // ------------------- RESET SYSTEM STATE -------------------
-    function clearAll() {
+    // Stop any simulation
+    stopJourneyTrace();
+
+    // Update risk card
+    const riskCard = document.getElementById('riskCard');
+    riskCard.style.display = 'block';
+    riskCard.className = `card risk-card glow-${risk.level}`;
+    const badge = document.getElementById('riskBadge');
+    badge.textContent = `${risk.level} RISK`;
+    badge.className = `severity-badge badge-${risk.level}`;
+    document.getElementById('confidenceVal').textContent = `${risk.confidence}%`;
+    document.getElementById('confidenceFill').style.width = `${risk.confidence}%`;
+    document.getElementById('scoreText').textContent = risk.score;
+    const circ = 2 * Math.PI * 29;
+    document.getElementById('scoreCircleFill').style.strokeDashoffset = circ - (risk.score / 100) * circ;
+    const pEl = document.getElementById('scoreCircleFill');
+    pEl.style.stroke = risk.level === 'HIGH' ? 'var(--high-color)' : risk.level === 'MEDIUM' ? 'var(--medium-color)' : 'var(--low-color)';
+    document.getElementById('scoreDesc').textContent = `ML predicts ${risk.severity.toLowerCase()} accident potential`;
+    document.getElementById('routeInfo').innerHTML = `
+        <div class="route-info-item"><i data-lucide="milestone"></i><span>${route.distance_km.toFixed(1)} km</span></div>
+        <div class="route-info-item"><i data-lucide="timer"></i><span>${Math.round(route.duration_min)} min</span></div>
+        <div class="route-info-item"><i data-lucide="gauge"></i><span>+${Math.round(route.traffic_delay_min)} min delay</span></div>
+        <div class="route-info-item"><i data-lucide="shield"></i><span>Score: ${risk.score}/100</span></div>`;
+    document.getElementById('riskFactors').innerHTML = risk.factors.map(f => {
+        const isAlert = /[🏍⚡🌧🌫⚠🛣]/.test(f);
+        return `<li class="${isAlert?'factor-alert':''}"><i data-lucide="circle-slash" style="width:11px;height:11px;flex-shrink:0;margin-top:2px;"></i><span>${f}</span></li>`;
+    }).join('');
+    lucide.createIcons();
+
+    speakMessage(`Route ${idx + 1} selected. ${route.distance_km.toFixed(1)} kilometres. Risk level: ${risk.level.toLowerCase()}.`);
+}
+
+// =====================================================================
+// INCIDENTS
+// =====================================================================
+async function loadIncidents(bbox) {
+    try {
+        const resp = await fetch('/api/incidents', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({bbox}) });
+        const data = await resp.json();
+        renderIncidents(data.incidents || []);
+    } catch(e) { console.warn('Incidents unavailable:', e); }
+}
+
+function renderIncidents(incidents) {
+    incidentMarkers.forEach(m => map.removeLayer(m));
+    incidentMarkers = [];
+
+    const pill = document.getElementById('incidentsPill');
+    const list = document.getElementById('incidentsList');
+
+    if (!incidents.length) {
+        pill.style.display = 'none';
+        return;
+    }
+
+    pill.style.display = 'flex';
+    document.getElementById('incidentsPillText').textContent = `${incidents.length} incident${incidents.length > 1 ? 's' : ''}`;
+
+    list.innerHTML = incidents.map(inc => {
+        const delay = inc.delay_sec > 0 ? ` (+${Math.round(inc.delay_sec/60)} min)` : '';
+        return `<div class="incident-item">
+            <div class="incident-item-title">&#9888; ${inc.description}${delay}</div>
+            <div class="incident-item-meta">${inc.from ? 'From: ' + inc.from : ''}${inc.to ? ' &rarr; ' + inc.to : ''}</div>
+        </div>`;
+    }).join('');
+
+    incidents.forEach(inc => {
+        const icon = L.divIcon({
+            html: `<div style="background:#f97316;width:14px;height:14px;border:2px solid white;border-radius:3px;box-shadow:0 0 8px rgba(249,115,22,0.5);transform:rotate(45deg);"></div>`,
+            iconSize: [14,14], className:''
+        });
+        const m = L.marker([inc.lat, inc.lon], { icon }).addTo(map);
+        m.bindPopup(`<b>&#9888; Traffic Incident</b><br>${inc.description}${inc.from ? '<br>From: ' + inc.from : ''}${inc.to ? ' &rarr; ' + inc.to : ''}`);
+        incidentMarkers.push(m);
+    });
+
+    lucide.createIcons();
+}
+
+function toggleIncidentsDrawer() {
+    const drawer = document.getElementById('incidentsDrawer');
+    drawer.classList.toggle('open');
+}
+
+// =====================================================================
+// RISK PROFILE CHART
+// =====================================================================
+function renderRiskChart(routes) {
+    const card = document.getElementById('riskChartCard');
+    card.style.display = 'block';
+    if (riskChartInstance) { riskChartInstance.destroy(); riskChartInstance = null; }
+
+    const ctx = document.getElementById('riskChart').getContext('2d');
+    const colors = ['#3b82f6','#10b981','#f59e0b','#ef4444'];
+
+    const datasets = routes.map((r, idx) => {
+        const N = 18;
+        const base = r.risk.score;
+        const labels = Array.from({length:N}, (_,i) => +(r.distance_km * i / (N-1)).toFixed(1));
+        const pts = Array.from({length:N}, (_, i) => {
+            const phase = i / (N - 1);
+            const noise = (Math.sin(i * 2.3 + idx * 1.1) * 8) + (Math.cos(i * 1.7 + idx * 0.7) * 5);
+            return Math.min(100, Math.max(0, Math.round(base + noise)));
+        });
+        return {
+            label: `Route ${idx+1} (${r.risk.level})`,
+            data: pts,
+            borderColor: colors[idx % colors.length],
+            backgroundColor: colors[idx % colors.length] + '18',
+            borderWidth: idx === activeRouteIndex ? 2.5 : 1.5,
+            fill: idx === 0,
+            tension: 0.4,
+            pointRadius: 0,
+            pointHoverRadius: 4
+        };
+    });
+
+    const N = 18;
+    const labels = Array.from({length:N}, (_,i) => +(routes[0].distance_km * i / (N-1)).toFixed(1));
+
+    riskChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { display: routes.length > 1, labels: { color:'#94a3b8', font:{size:10,family:"'Plus Jakarta Sans'"}, boxWidth:12, padding:10 } },
+                tooltip: { backgroundColor:'rgba(10,18,40,0.9)', titleColor:'#f1f5f9', bodyColor:'#94a3b8', borderColor:'rgba(255,255,255,0.08)', borderWidth:1, callbacks: { title: items => `${items[0].label} km`, label: item => ` Risk: ${item.raw}/100` } }
+            },
+            scales: {
+                x: { grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#475569',font:{size:9},maxTicksLimit:6}, title:{display:true,text:'Distance (km)',color:'#475569',font:{size:9}} },
+                y: { grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#475569',font:{size:9},maxTicksLimit:5}, min:0, max:100, title:{display:true,text:'Risk Score',color:'#475569',font:{size:9}} }
+            },
+            animation:{ duration:600, easing:'easeOutCubic' }
+        }
+    });
+}
+
+// =====================================================================
+// SHARE ROUTE
+// =====================================================================
+function shareRoute() {
+    const start = document.getElementById('start').value;
+    const end = document.getElementById('end').value;
+    const vehicle = document.getElementById('vehicle').value;
+    if (!start || !end) return;
+    const url = `${window.location.origin}${window.location.pathname}?from=${encodeURIComponent(start)}&to=${encodeURIComponent(end)}&vehicle=${encodeURIComponent(vehicle)}`;
+    navigator.clipboard.writeText(url).then(() => {
+        const toast = document.getElementById('shareToast');
+        toast.classList.add('visible');
+        setTimeout(() => toast.classList.remove('visible'), 2800);
+    }).catch(() => prompt('Copy this link:', url));
+}
+
+// =====================================================================
+// SIMULATION
+// =====================================================================
+function startJourneyTrace() {
+    if (!routeCoordsList.length) return;
+    if (simulatedMarker) { map.removeLayer(simulatedMarker); simulatedMarker = null; }
+    const icon = L.divIcon({ html: '<div></div>', iconSize:[18,18], className:'moving-marker' });
+    currentTraceIndex = 0;
+    isTracePaused = false;
+    simulatedMarker = L.marker(routeCoordsList[0], { icon }).addTo(map);
+    simulatedMarker.bindPopup('🚗 Simulating route...');
+    clearInterval(traceIntervalId);
+    traceIntervalId = setInterval(traceStep, 140);
+    setState(AppState.NAVIGATING);
+    document.getElementById('startJourneyBtn').querySelector('span').textContent = 'Restart';
+    updateStatus('Simulation in progress...', 'active-status');
+
+    // Init turn-by-turn with route instructions
+    updateTurnByTurnFromIndex(0);
+}
+
+function traceStep() {
+    if (isTracePaused) return;
+    if (currentTraceIndex >= routeCoordsList.length) {
         stopJourneyTrace();
-        
-        if (startMarker) map.removeLayer(startMarker);
-        if (endMarker) map.removeLayer(endMarker);
-        if (routeLayer) map.removeLayer(routeLayer);
-        
-        startMarker = endMarker = routeLayer = null;
-        selectingStart = true;
-        currentRouteData = null;
-        routeCoordsList = [];
-        
-        document.getElementById('start').value = '';
-        document.getElementById('end').value = '';
-        document.getElementById('email').value = '';
-        document.getElementById('riskCard').style.display = 'none';
-        document.getElementById('weatherCard').style.display = 'none';
-        document.getElementById('historyPanel').style.display = 'none';
-        document.getElementById('journeyControls').style.display = 'none';
-        
-        updateStatus('Configure route coordinates to start');
-        
-        map.setView([20.5937, 78.9629], 5);
-        addHeatmap();
+        setState(AppState.CALCULATED);
+        speakMessage('Simulated vehicle has arrived at destination.');
+        updateStatus('Simulation complete.', 'active-status');
+        return;
+    }
+    const p = routeCoordsList[currentTraceIndex];
+    simulatedMarker.setLatLng(p);
+    if (cameraFollowsMarker) map.panTo(p, { animate:true, duration:0.2 });
+
+    const pct = Math.round((currentTraceIndex / (routeCoordsList.length - 1)) * 100);
+    updateProgressUI(pct);
+    updateHUDFromSim(currentTraceIndex);
+    updateTurnByTurnFromIndex(currentTraceIndex);
+    currentTraceIndex++;
+}
+
+function pauseJourneyTrace() {
+    if (!simulatedMarker) return;
+    isTracePaused = !isTracePaused;
+    document.getElementById('pauseJourneyBtn').querySelector('span').textContent = isTracePaused ? 'Resume' : 'Pause';
+    updateStatus(isTracePaused ? 'Simulation paused' : 'Simulation resumed', 'active-status');
+}
+
+function stopJourneyTrace() {
+    clearInterval(traceIntervalId);
+    if (simulatedMarker) { map.removeLayer(simulatedMarker); simulatedMarker = null; }
+    document.getElementById('startJourneyBtn').querySelector('span').textContent = 'Simulate';
+    document.getElementById('pauseJourneyBtn').querySelector('span').textContent = 'Pause';
+    isTracePaused = false;
+}
+
+// =====================================================================
+// LIVE GPS JOURNEY
+// =====================================================================
+function toggleActiveJourney() {
+    if (activeJourneyId === null) {
+        if (!navigator.geolocation) { alert('GPS not supported'); return; }
+        if (!routeCoordsList.length) { alert('Calculate a route first.'); return; }
+        warnedHotspots = {};
+        arrivedAtDestination = false;
+        journeyStartTime = Date.now();
+        journeyStartDist = currentRouteData ? currentRouteData.distance : 0;
+        lastUserPosition = null;
+        cameraFollowsUser = true;
+        updateCameraFollowUI();
+
+        activeJourneyId = navigator.geolocation.watchPosition(
+            onLiveLocationUpdate, onLiveLocationError,
+            { enableHighAccuracy: true, maximumAge: 2000, timeout: 12000 }
+        );
+
+        setState(AppState.NAVIGATING);
+        const icon = document.getElementById('liveJourneyIcon');
+        icon.setAttribute('data-lucide', 'square');
+        icon.style.color = 'var(--high-color)';
+        document.getElementById('liveJourneyText').textContent = 'Stop GPS';
+        document.getElementById('gpsJourneyFab').classList.add('active');
+        document.getElementById('gpsJourneyFabIcon').setAttribute('data-lucide', 'navigation');
+        lucide.createIcons();
+        speakMessage('Live GPS navigation started. Tracking your location in real time.');
+    } else {
+        stopActiveJourney();
+    }
+}
+
+function stopActiveJourney() {
+    if (activeJourneyId !== null) {
+        navigator.geolocation.clearWatch(activeJourneyId);
+        activeJourneyId = null;
+    }
+    if (userMarker) { map.removeLayer(userMarker); userMarker = null; }
+    if (userAccuracyCircle) { map.removeLayer(userAccuracyCircle); userAccuracyCircle = null; }
+    const icon = document.getElementById('liveJourneyIcon');
+    icon.setAttribute('data-lucide', 'navigation-2');
+    icon.style.color = 'var(--low-color)';
+    document.getElementById('liveJourneyText').textContent = 'Start GPS';
+    document.getElementById('gpsJourneyFab').classList.remove('active');
+    document.getElementById('gpsJourneyFabIcon').setAttribute('data-lucide', 'navigation-2');
+    lucide.createIcons();
+    setState(AppState.CALCULATED);
+    updateStatus('GPS navigation stopped.');
+    speakMessage('Navigation stopped.');
+}
+
+function endNavigation() {
+    stopJourneyTrace();
+    stopActiveJourney();
+    setState(AppState.CALCULATED);
+}
+
+function onLiveLocationUpdate(pos) {
+    if (arrivedAtDestination) return;
+    const lat = pos.coords.latitude, lng = pos.coords.longitude;
+    const accuracy = pos.coords.accuracy;
+    const speedMs = pos.coords.speed;
+    const speedKph = speedMs != null ? Math.round(speedMs * 3.6) : null;
+
+    updateStatus(`GPS: ${accuracy.toFixed(0)}m accuracy${speedKph != null ? ` | ${speedKph} km/h` : ''}`, 'active-status');
+
+    // User marker
+    const liveIcon = L.divIcon({
+        html: '<div style="background:#10b981;width:16px;height:16px;border:3px solid white;border-radius:50%;box-shadow:0 0 12px #10b981;"></div>',
+        iconSize:[16,16], className:'moving-marker'
+    });
+    if (userMarker) userMarker.setLatLng([lat, lng]);
+    else { userMarker = L.marker([lat, lng], { icon: liveIcon }).addTo(map); userMarker.bindPopup('Your Location'); }
+    if (userAccuracyCircle) userAccuracyCircle.setLatLng([lat, lng]).setRadius(accuracy);
+    else userAccuracyCircle = L.circle([lat, lng], { radius: accuracy, color:'#10b981', fillColor:'#10b981', fillOpacity:0.06, weight:1.5 }).addTo(map);
+
+    if (cameraFollowsUser) map.setView([lat, lng], 16, { animate:true });
+
+    // Progress along route
+    const progress = computeProgressAlongRoute(lat, lng, routeCoordsList.map(p => [p.lat, p.lng]));
+    updateProgressUI(progress.pct);
+    updateHUDFromGPS(speedKph, progress);
+    updateTurnByTurnFromGPS(lat, lng, progress.nearestIdx);
+
+    // Hotspot proximity check
+    HOTSPOTS.forEach(h => {
+        const dist = getDistanceBetween([lat, lng], [h[0], h[1]]);
+        if (dist < 350) {
+            const key = h.toString(), now = Date.now();
+            if (!warnedHotspots[key] || now - warnedHotspots[key] > 90000) {
+                warnedHotspots[key] = now;
+                speakMessage('Warning: approaching a known high-risk accident zone. Exercise extreme caution.');
+                const flash = L.circle([h[0], h[1]], { radius:140, color:'var(--high-color)', fillColor:'var(--high-color)', fillOpacity:0.25, weight:2 }).addTo(map);
+                setTimeout(() => map.removeLayer(flash), 5000);
+            }
+        }
+    });
+
+    // Deviation check
+    if (routeCoordsList.length > 0) {
+        const rawPts = routeCoordsList.map(p => [p.lat, p.lng]);
+        const dev = getDistanceToPolyline([lat, lng], rawPts);
+        if (dev > 150 && !isTracePaused) {
+            speakMessage('Off route. Recalculating from your current location.');
+            document.getElementById('start').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+            setMarker('start', lat, lng, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+            calculateRoute();
+            return;
+        }
     }
 
-    window.addEventListener('load', initMap);
+    // Arrival check
+    if (endMarker) {
+        const dest = endMarker.getLatLng();
+        const distToDest = getDistanceBetween([lat, lng], [dest.lat, dest.lng]);
+        if (distToDest < 80) {
+            arrivedAtDestination = true;
+            const elapsed = journeyStartTime ? Math.round((Date.now() - journeyStartTime) / 60000) : '--';
+            showArrivalModal(journeyStartDist, elapsed);
+        }
+    }
+
+    lastUserPosition = [lat, lng];
+}
+
+function onLiveLocationError(err) {
+    console.error('GPS error:', err);
+    updateStatus(`GPS Error: ${err.message}`, 'error-status');
+}
+
+// =====================================================================
+// HUD & TURN-BY-TURN UPDATE
+// =====================================================================
+function updateHUDFromSim(pointIndex) {
+    if (!currentRouteData || routeCoordsList.length === 0) return;
+    const totalPts = routeCoordsList.length;
+    const totalDist = currentRouteData.distance;
+    const totalDur = currentRouteData.duration;
+    const pct = pointIndex / (totalPts - 1);
+    const distLeft = totalDist * (1 - pct);
+    const etaMin = Math.round(totalDur * (1 - pct));
+
+    document.getElementById('hudSpeed').textContent = '60';
+    document.getElementById('hudETA').textContent = etaMin;
+    document.getElementById('hudDistLeft').textContent = distLeft.toFixed(1);
+    document.getElementById('hudPercent').textContent = Math.round(pct * 100) + '%';
+    document.getElementById('hudProgress').style.width = (pct * 100) + '%';
+}
+
+function updateHUDFromGPS(speedKph, progress) {
+    document.getElementById('hudSpeed').textContent = speedKph != null ? speedKph : '--';
+    document.getElementById('hudETA').textContent = progress.etaMin != null ? progress.etaMin : '--';
+    document.getElementById('hudDistLeft').textContent = progress.distLeft != null ? progress.distLeft.toFixed(1) : '--';
+    document.getElementById('hudPercent').textContent = Math.round(progress.pct) + '%';
+    document.getElementById('hudProgress').style.width = progress.pct + '%';
+}
+
+function updateProgressUI(pct) {
+    document.getElementById('journeyProgressFill').style.width = pct + '%';
+    document.getElementById('journeyProgressPct').textContent = Math.round(pct) + '%';
+}
+
+function updateTurnByTurnFromIndex(pointIndex) {
+    const route = allRoutes[activeRouteIndex];
+    if (!route || !route.instructions || route.instructions.length === 0) return;
+
+    // Find instruction closest to current point
+    let nearestInst = route.instructions[0];
+    for (const inst of route.instructions) {
+        if (inst.point_index <= pointIndex) nearestInst = inst;
+        else break;
+    }
+
+    const nextInst = route.instructions.find(i => i.point_index > pointIndex);
+    const distToNext = nextInst ? Math.abs(nextInst.route_offset_m - (nearestInst.route_offset_m || 0)) : 0;
+    const maneuver = (nearestInst.maneuver || 'DEFAULT').toUpperCase();
+    const iconName = MANEUVER_ICONS[maneuver] || MANEUVER_ICONS.DEFAULT;
+
+    document.getElementById('tbtInstruction').textContent = nearestInst.message || 'Follow the route';
+    document.getElementById('tbtStreet').textContent = nearestInst.street || '';
+    document.getElementById('tbtDistance').textContent = nextInst ? formatDist(distToNext) + ' ahead' : 'Arriving soon';
+
+    const tbtIcon = document.getElementById('tbtIcon');
+    tbtIcon.setAttribute('data-lucide', iconName);
+    lucide.createIcons();
+}
+
+function updateTurnByTurnFromGPS(lat, lng, nearestIdx) {
+    updateTurnByTurnFromIndex(nearestIdx);
+}
+
+function formatDist(m) {
+    if (m >= 1000) return (m / 1000).toFixed(1) + ' km';
+    return Math.round(m) + ' m';
+}
+
+// =====================================================================
+// ARRIVAL MODAL
+// =====================================================================
+function showArrivalModal(distKm, timeMin) {
+    document.getElementById('arrivalDist').textContent = typeof distKm === 'number' ? distKm.toFixed(1) : '--';
+    document.getElementById('arrivalTime').textContent = timeMin;
+    document.getElementById('arrivalModal').classList.add('visible');
+    stopJourneyTrace();
+    stopActiveJourney();
+    speakMessage(`You have arrived at your destination. Journey complete. ${distKm.toFixed(1)} kilometres covered.`);
+    setState(AppState.ARRIVED);
+}
+
+function closeArrivalModal() {
+    document.getElementById('arrivalModal').classList.remove('visible');
+    setState(AppState.CALCULATED);
+}
+
+// =====================================================================
+// CAMERA FOLLOW
+// =====================================================================
+function toggleCameraFollow() {
+    cameraFollowsUser = !cameraFollowsUser;
+    cameraFollowsMarker = cameraFollowsUser;
+    updateCameraFollowUI();
+}
+
+function updateCameraFollowUI() {
+    const text = document.getElementById('cameraFollowText');
+    const icon = document.getElementById('cameraFollowIcon');
+    text.textContent = cameraFollowsUser ? 'Follow: ON' : 'Follow: OFF';
+    icon.setAttribute('data-lucide', cameraFollowsUser ? 'eye' : 'eye-off');
+    lucide.createIcons();
+}
+
+// =====================================================================
+// MATH UTILS
+// =====================================================================
+function getDistanceBetween(p1, p2) {
+    const R = 6371000;
+    const dLat = (p2[0]-p1[0])*Math.PI/180, dLon = (p2[1]-p1[1])*Math.PI/180;
+    const lat1 = p1[0]*Math.PI/180, lat2 = p2[0]*Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function getShortestDistanceToSegment(p, p1, p2) {
+    const latMid = (p1[0]+p2[0])/2;
+    const mLat = 111132.954 - 559.822*Math.cos(2*latMid*Math.PI/180);
+    const mLon = 111412.84*Math.cos(latMid*Math.PI/180);
+    const x2 = (p2[1]-p1[1])*mLon, y2 = (p2[0]-p1[0])*mLat;
+    const xp = (p[1]-p1[1])*mLon, yp = (p[0]-p1[0])*mLat;
+    const l2 = x2*x2+y2*y2;
+    if (l2 === 0) return Math.sqrt(xp*xp+yp*yp);
+    const t = Math.max(0, Math.min(1, (xp*x2+yp*y2)/l2));
+    return Math.sqrt((xp-t*x2)**2+(yp-t*y2)**2);
+}
+
+function getDistanceToPolyline(latlng, pts) {
+    let min = Infinity;
+    for (let i = 0; i < pts.length-1; i++) { const d = getShortestDistanceToSegment(latlng, pts[i], pts[i+1]); if (d < min) min = d; }
+    return min;
+}
+
+function computeProgressAlongRoute(lat, lng, pts) {
+    if (!pts || pts.length === 0) return { pct: 0, nearestIdx: 0, distLeft: null, etaMin: null };
+    let minDist = Infinity, nearestIdx = 0;
+    for (let i = 0; i < pts.length; i++) {
+        const d = getDistanceBetween([lat, lng], pts[i]);
+        if (d < minDist) { minDist = d; nearestIdx = i; }
+    }
+    const pct = Math.round((nearestIdx / (pts.length - 1)) * 100);
+    const totalDist = currentRouteData ? currentRouteData.distance : null;
+    const totalDur = currentRouteData ? currentRouteData.duration : null;
+    const distLeft = totalDist ? totalDist * (1 - nearestIdx/(pts.length-1)) : null;
+    const etaMin = totalDur ? Math.round(totalDur * (1 - nearestIdx/(pts.length-1))) : null;
+    return { pct, nearestIdx, distLeft, etaMin };
+}
+
+// =====================================================================
+// TTS
+// =====================================================================
+function speakMessage(msg) {
+    if (!voiceEnabled) return;
+    if (currentUtterance) window.speechSynthesis.cancel();
+    currentUtterance = new SpeechSynthesisUtterance(msg);
+    currentUtterance.rate = 0.95;
+    currentUtterance.onend = () => { currentUtterance = null; };
+    window.speechSynthesis.speak(currentUtterance);
+}
+
+function setVoice(on) {
+    voiceEnabled = on;
+    document.getElementById('voiceOnBtn').classList.toggle('active', on);
+    document.getElementById('voiceOffBtn').classList.toggle('active', !on);
+    if (!on && window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+    if (on) speakMessage('Voice guidance enabled');
+    updateStatus(on ? 'Voice guidance active' : 'Voice guidance muted', on ? 'active-status' : '');
+}
+
+function speakNow() {
+    if (!currentRouteData) { speakMessage('No active route. Enter start and destination to calculate.'); return; }
+    const r = currentRouteData.risk;
+    speakMessage(`Route risk score is ${r.score} out of 100. Risk level: ${r.level.toLowerCase()}. Predicted severity: ${r.severity.toLowerCase()}.`);
+}
+
+// =====================================================================
+// TRIP HISTORY
+// =====================================================================
+function saveTripToHistory(start, end, risk, score, dist, dur) {
+    let h = JSON.parse(localStorage.getItem('tripHistory') || '[]');
+    h.unshift({ id:Date.now(), start, end, risk, score, distance:dist.toFixed(1), duration:Math.round(dur), date:new Date().toLocaleDateString() });
+    if (h.length > 12) h.pop();
+    localStorage.setItem('tripHistory', JSON.stringify(h));
+}
+
+function toggleHistory() {
+    const panel = document.getElementById('historyPanel');
+    const fab = document.getElementById('historyFab');
+    const open = panel.style.display === 'block';
+    panel.style.display = open ? 'none' : 'block';
+    fab.classList.toggle('active', !open);
+    if (!open) { showHistory(); panel.scrollIntoView({ behavior:'smooth' }); }
+}
+
+function showHistory() {
+    const div = document.getElementById('historyList');
+    const h = JSON.parse(localStorage.getItem('tripHistory') || '[]');
+    if (!h.length) { div.innerHTML = `<div style="font-size:0.78rem;color:var(--text-muted);text-align:center;padding:12px 0;">No trips logged yet.</div>`; return; }
+    div.innerHTML = h.map(t => `
+        <div class="history-item" onclick="restoreTrip('${t.start.replace(/'/g,"\\'")}','${t.end.replace(/'/g,"\\'")}')">
+            <div class="history-item-header">
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;">${t.start.split(',')[0]} &rarr; ${t.end.split(',')[0]}</span>
+                <span class="history-badge badge-${t.risk}">${t.risk}</span>
+            </div>
+            <div class="history-item-details">
+                <span>${t.distance} km | ${t.duration} min</span>
+                <span>${t.date}</span>
+            </div>
+        </div>`).join('');
+}
+
+function restoreTrip(start, end) {
+    document.getElementById('start').value = start;
+    document.getElementById('end').value = end;
+    document.getElementById('historyPanel').style.display = 'none';
+    document.getElementById('historyFab').classList.remove('active');
+    calculateRoute();
+}
+
+function clearHistory() {
+    if (confirm('Clear all trip history?')) { localStorage.removeItem('tripHistory'); showHistory(); }
+}
+
+// =====================================================================
+// PANEL CONTROLS
+// =====================================================================
+function toggleAdvancedPanel() {
+    const c = document.getElementById('advContent');
+    c.classList.toggle('expanded');
+    document.getElementById('advChevron').setAttribute('data-lucide', c.classList.contains('expanded') ? 'chevron-up' : 'chevron-down');
+    lucide.createIcons();
+}
+
+function updateSliderVal(v) { document.getElementById('speedVal').textContent = `${v} mph`; }
+
+function syncWeatherToSurface() {
+    const w = document.getElementById('weather').value;
+    const map = { Rain:'Wet or damp', Snow:'Snow', Fog:'Wet or damp', Clear:'Dry' };
+    document.getElementById('road_surface').value = map[w] || 'Dry';
+}
+
+function toggleBottomSheet() { document.querySelector('.sidebar').classList.toggle('collapsed'); }
+function toggleBottomSheetOnMobileHeader() { if (window.innerWidth < 768) toggleBottomSheet(); }
+function expandBottomSheet() { if (window.innerWidth < 768) document.querySelector('.sidebar').classList.remove('collapsed'); }
+
+// =====================================================================
+// CLEAR ALL
+// =====================================================================
+function clearAll() {
+    stopJourneyTrace();
+    stopActiveJourney();
+    arrivedAtDestination = false;
+    allRouteLayers.forEach(l => map.removeLayer(l)); allRouteLayers = [];
+    incidentMarkers.forEach(m => map.removeLayer(m)); incidentMarkers = [];
+    if (startMarker) { map.removeLayer(startMarker); startMarker = null; }
+    if (endMarker) { map.removeLayer(endMarker); endMarker = null; }
+    allRoutes = []; routeCoordsList = [];
+    currentRouteData = null; selectingStart = true;
+    ['start','end','email'].forEach(id => document.getElementById(id).value = '');
+    ['riskCard','weatherCard','historyPanel'].forEach(id => document.getElementById(id).style.display = 'none');
+    document.getElementById('riskChartCard').style.display = 'none';
+    document.getElementById('journeyControls').style.display = 'none';
+    document.getElementById('activeJourneyControls').style.display = 'none';
+    document.getElementById('journeyProgressSection').style.display = 'none';
+    document.getElementById('shareBtn').style.display = 'none';
+    document.getElementById('incidentsPill').style.display = 'none';
+    document.getElementById('incidentsDrawer').classList.remove('open');
+    updateProgressUI(0);
+    if (riskChartInstance) { riskChartInstance.destroy(); riskChartInstance = null; }
+    setState(AppState.IDLE);
+    updateStatus('Configure route to start');
+    map.setView([20.5937, 78.9629], 5);
+    addHeatmap(); lucide.createIcons();
+}
+
+// =====================================================================
+// SIMULATION BUTTON LISTENERS
+// =====================================================================
+document.getElementById('startJourneyBtn').addEventListener('click', startJourneyTrace);
+document.getElementById('pauseJourneyBtn').addEventListener('click', pauseJourneyTrace);
+document.getElementById('resetJourneyBtn').addEventListener('click', () => { stopJourneyTrace(); setState(AppState.CALCULATED); updateProgressUI(0); updateStatus('Simulation reset.', 'active-status'); });
+
+// =====================================================================
+// BOOT
+// =====================================================================
+window.addEventListener('load', initMap);
 </script>
 </body>
 </html>
