@@ -1,289 +1,1198 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Route Risk Predictor – Live Traffic & Weather</title>
+    <title>Smart Traffic IQ – ML Route Risk Predictor</title>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="description" content="AI-driven smart traffic safety route planner. Predict accident hazards and evaluate risks in real time using ML models.">
+    
+    <!-- Google Fonts: Plus Jakarta Sans & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
     <!-- Leaflet core + heatmap -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
-    <!-- MarkerMotion plugin for moving marker -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.marker-motion@0.7.0/leaflet.marker-motion.css" />
-    <script src="https://cdn.jsdelivr.net/npm/leaflet.marker-motion@0.7.0/leaflet.marker-motion.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
     <style>
+        :root {
+            --bg-main: #060913;
+            --bg-sidebar: rgba(10, 16, 32, 0.78);
+            --bg-card: rgba(22, 32, 59, 0.6);
+            --border-glass: rgba(255, 255, 255, 0.08);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            
+            --primary: #3b82f6;
+            --primary-grad: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            --primary-hover: #2563eb;
+            
+            --low-color: #10b981;
+            --low-glow: rgba(16, 185, 129, 0.2);
+            --medium-color: #f59e0b;
+            --medium-glow: rgba(245, 158, 11, 0.2);
+            --high-color: #ef4444;
+            --high-glow: rgba(239, 68, 68, 0.25);
+            
+            --font-display: 'Outfit', sans-serif;
+            --font-sans: 'Plus Jakarta Sans', sans-serif;
+        }
+
         * {
             box-sizing: border-box;
-        }
-        body {
             margin: 0;
-            font-family: 'Segoe UI', Roboto, Arial, sans-serif;
-            background: #f0f2f5;
+            padding: 0;
+            font-family: var(--font-sans);
         }
-        /* Main container – column on mobile, row on desktop */
+
+        body {
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            background: var(--bg-main);
+            color: var(--text-primary);
+        }
+
+        /* App Layout Container */
         .app-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+        }
+
+        /* Map styling */
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            background: #0d111a;
+        }
+
+        /* Darken Leaflet elements to integrate into Dark Mode */
+        .leaflet-container {
+            background-color: #0b0e14 !important;
+        }
+        .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+            background: rgba(15, 23, 42, 0.9) !important;
+            color: var(--text-primary) !important;
+            border: 1px solid var(--border-glass);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+        }
+        .leaflet-popup-content {
+            font-family: var(--font-sans);
+            font-size: 0.82rem;
+            font-weight: 500;
+        }
+
+        /* Floating Sidebar (Desktop) */
+        .sidebar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            bottom: 20px;
+            width: 420px;
+            background: var(--bg-sidebar);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border: 1px solid var(--border-glass);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+            border-radius: 24px;
+            z-index: 1000;
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        /* Sidebar – full width on mobile, fixed width on desktop */
-        .sidebar {
-            background: white;
-            padding: 16px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            overflow-y: auto;
-            z-index: 10;
-            transition: all 0.3s;
-        }
-        .map-container {
-            flex: 1;
-            position: relative;
-            min-height: 300px;
-        }
-        #map {
-            height: 100%;
-            width: 100%;
-        }
-        /* Responsive breakpoint */
-        @media (min-width: 768px) {
-            .app-container {
-                flex-direction: row;
-            }
-            .sidebar {
-                width: 420px;
-                box-shadow: 2px 0 12px rgba(0,0,0,0.1);
-            }
-        }
-        h2 {
-            color: #1e3a8a;
-            margin: 0 0 8px 0;
-            font-size: 1.5rem;
-        }
-        .form-group {
-            margin-bottom: 12px;
-        }
-        label {
-            font-weight: 600;
-            font-size: 13px;
-            color: #334155;
-            display: block;
-            margin-bottom: 4px;
-        }
-        input, select {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #cbd5e1;
-            border-radius: 12px;
-            font-size: 14px;
-            background: white;
-        }
-        button {
-            width: 100%;
-            padding: 10px;
-            background: #1e3a8a;
-            border: none;
-            border-radius: 40px;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 6px;
-            transition: background 0.2s;
-        }
-        button:hover {
-            background: #2563eb;
-        }
-        .search-btn {
-            background: #0f172a;
-        }
-        .voice-controls {
-            display: flex;
-            gap: 10px;
-            margin: 8px 0;
-        }
-        .voice-controls button {
-            margin: 0;
-            flex: 1;
-            background: #334155;
-        }
-        .voice-on { background: #15803d; }
-        .voice-off { background: #b91c1c; }
-        .voice-pause { background: #d97706; }
-        .risk-card, .weather-card, .history-panel {
-            background: #f8fafc;
-            border-radius: 20px;
-            padding: 16px;
-            margin-top: 16px;
-            border-left: 6px solid;
+
+        .bottom-sheet-handle {
             display: none;
+            width: 50px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 99px;
+            margin: 12px auto 4px auto;
+            cursor: pointer;
+            flex-shrink: 0;
         }
-        .risk-level {
-            font-size: 24px;
+
+        /* Header Style */
+        .sidebar-header {
+            padding: 22px 26px 16px 26px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            flex-shrink: 0;
+        }
+
+        .sidebar-header h1 {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
             font-weight: 800;
-            text-align: center;
-            padding: 12px;
-            border-radius: 40px;
+            letter-spacing: -0.5px;
+            background: linear-gradient(90deg, #60a5fa 0%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        .risk-LOW { background: #22c55e; color: white; }
-        .risk-MEDIUM { background: #f97316; color: white; }
-        .risk-HIGH { background: #ef4444; color: white; }
-        .route-info, .weather-info {
-            background: #e6f0ff;
-            padding: 12px;
-            border-radius: 16px;
-            margin: 12px 0;
-            font-size: 14px;
-        }
+
         .status-bar {
-            background: #eef2ff;
-            padding: 8px 12px;
-            border-radius: 40px;
-            font-size: 12px;
-            text-align: center;
-            margin-bottom: 12px;
+            margin-top: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            color: var(--text-secondary);
+            padding: 8px 14px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
         }
-        .legend {
+
+        .status-bar.active-status {
+            background: rgba(59, 130, 246, 0.1);
+            color: #60a5fa;
+            border-color: rgba(59, 130, 246, 0.2);
+        }
+
+        /* Scroll Area */
+        .sidebar-scroll {
+            padding: 20px 26px;
+            overflow-y: auto;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .sidebar-scroll::-webkit-scrollbar {
+            width: 5px;
+        }
+        .sidebar-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .sidebar-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 99px;
+        }
+
+        /* Form Controls */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            position: relative;
+        }
+
+        .form-group label {
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        .input-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-icon {
             position: absolute;
-            bottom: 20px;
-            right: 20px;
-            background: rgba(255,255,255,0.9);
-            backdrop-filter: blur(4px);
-            padding: 8px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            z-index: 1000;
-        }
-        .legend-color {
-            display: inline-block;
+            left: 14px;
+            color: var(--text-secondary);
             width: 16px;
             height: 16px;
-            border-radius: 4px;
-            margin-right: 6px;
-            vertical-align: middle;
+            pointer-events: none;
         }
-        .history-list {
-            max-height: 200px;
-            overflow-y: auto;
-            margin-top: 8px;
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px 14px 12px 42px;
+            border: 1px solid var(--border-glass);
+            border-radius: 14px;
+            font-size: 0.9rem;
+            background: rgba(15, 23, 42, 0.4);
+            color: var(--text-primary);
+            outline: none;
+            transition: all 0.25s ease;
+            font-weight: 500;
         }
-        .history-item {
-            border-bottom: 1px solid #ddd;
-            padding: 8px;
+
+        .form-group input:focus, .form-group select:focus {
+            border-color: var(--primary);
+            background: rgba(15, 23, 42, 0.7);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+        }
+
+        .inline-btn {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--primary-grad);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .inline-btn:hover {
+            transform: translateY(-50%) scale(1.03);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
+        /* Flex Parameter Grid */
+        .params-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+        }
+
+        .params-grid .form-group input, .params-grid .form-group select {
+            padding-left: 12px;
+        }
+
+        .select-wrapper {
+            position: relative;
+            width: 100%;
+        }
+
+        .select-wrapper select {
+            appearance: none;
+            -webkit-appearance: none;
+            padding-right: 28px;
+        }
+
+        .select-wrapper::after {
+            content: "↓";
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+
+        /* Collapsible Advanced Parameters Panel */
+        .advanced-panel {
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.01);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .advanced-header {
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.02);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .advanced-header:hover {
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-primary);
+        }
+
+        .advanced-content {
+            padding: 16px;
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            border-top: 1px solid var(--border-glass);
+        }
+
+        .advanced-content.expanded {
+            display: flex;
+        }
+
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .slider-group input[type="range"] {
+            flex-grow: 1;
+            padding: 0;
+            height: 6px;
+            background: #1e293b;
+            border-radius: 5px;
+            outline: none;
+            accent-color: #3b82f6;
             cursor: pointer;
         }
-        .history-item:hover {
-            background: #e2e8f0;
+
+        .slider-value {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #3b82f6;
+            min-width: 48px;
+            text-align: right;
         }
-        .instruction {
-            font-size: 11px;
-            background: #f1f5f9;
-            padding: 10px;
-            border-radius: 16px;
-            text-align: center;
-            margin-top: 12px;
-            color: #475569;
-        }
-        .journey-controls {
+
+        /* Voice Alerts Control Panel */
+        .voice-controls-row {
             display: flex;
-            gap: 8px;
-            margin: 10px 0;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.02);
+            padding: 8px 12px;
+            border-radius: 14px;
+            border: 1px solid var(--border-glass);
         }
+
+        .voice-controls-row .label-text {
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-right: auto;
+            letter-spacing: 0.3px;
+        }
+
+        .voice-toggle-btn {
+            padding: 8px 12px;
+            border: 1px solid var(--border-glass);
+            border-radius: 10px;
+            background: rgba(15, 23, 42, 0.6);
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+
+        .voice-toggle-btn:hover {
+            color: var(--text-primary);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .voice-toggle-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
+        /* Primary Action Button */
+        button.primary-btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary-grad);
+            border: none;
+            border-radius: 14px;
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.95rem;
+            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.35);
+        }
+
+        button.primary-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(59, 130, 246, 0.55);
+        }
+
+        /* Card Styling */
+        .card {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 18px;
+            border: 1px solid var(--border-glass);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            transition: all 0.4s ease;
+        }
+
+        /* ML Risk Assessment Card */
+        .risk-card {
+            display: none;
+            border-left: 5px solid var(--border-glass);
+        }
+
+        .risk-card.glow-LOW {
+            border-left-color: var(--low-color);
+            box-shadow: 0 12px 32px var(--low-glow);
+        }
+        .risk-card.glow-MEDIUM {
+            border-left-color: var(--medium-color);
+            box-shadow: 0 12px 32px var(--medium-glow);
+        }
+        .risk-card.glow-HIGH {
+            border-left-color: var(--high-color);
+            box-shadow: 0 12px 32px var(--high-glow);
+        }
+
+        .risk-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .severity-badge {
+            font-family: var(--font-display);
+            font-size: 1.15rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 6px 14px;
+            border-radius: 12px;
+        }
+
+        .badge-LOW { background: rgba(16, 185, 129, 0.15); color: var(--low-color); border: 1px solid rgba(16, 185, 129, 0.25); }
+        .badge-MEDIUM { background: rgba(245, 158, 11, 0.15); color: var(--medium-color); border: 1px solid rgba(245, 158, 11, 0.25); }
+        .badge-HIGH { background: rgba(239, 68, 68, 0.15); color: var(--high-color); border: 1px solid rgba(239, 68, 68, 0.25); }
+
+        .confidence-indicator {
+            text-align: right;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+        }
+
+        .confidence-bar {
+            width: 100px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            margin-top: 4px;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .confidence-bar-fill {
+            height: 100%;
+            background: var(--primary-grad);
+            width: 0%;
+            transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* Risk Score circular ring */
+        .score-display-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .score-circle {
+            position: relative;
+            width: 68px;
+            height: 68px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .score-circle svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .score-circle circle {
+            fill: none;
+            stroke-width: 6;
+        }
+
+        .score-circle .circle-bg {
+            stroke: rgba(255, 255, 255, 0.05);
+        }
+
+        .score-circle .circle-progress {
+            stroke: var(--primary);
+            stroke-linecap: round;
+            stroke-dasharray: 207;
+            stroke-dashoffset: 207;
+            transition: stroke-dashoffset 0.8s ease-out;
+        }
+
+        .score-text {
+            position: absolute;
+            font-family: var(--font-display);
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+
+        .score-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .score-label {
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .score-desc {
+            font-size: 0.82rem;
+            color: var(--text-primary);
+            font-weight: 600;
+            margin-top: 2px;
+        }
+
+        /* Route Info Grid */
+        .route-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            background: rgba(0,0,0,0.2);
+            padding: 12px;
+            border-radius: 14px;
+            margin-bottom: 16px;
+        }
+
+        .route-info-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .route-info-item svg {
+            width: 16px;
+            height: 16px;
+            color: #60a5fa;
+        }
+
+        /* Risk Factors List */
+        .risk-factors-title {
+            font-size: 0.78rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .risk-factors-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .risk-factors-list li {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+            padding: 8px 10px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 10px;
+            border-left: 3px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .risk-factors-list li.factor-alert {
+            border-left-color: var(--high-color);
+            background: rgba(239, 68, 68, 0.03);
+        }
+
+        /* Live Weather Display */
+        .weather-card {
+            display: none;
+        }
+
+        .weather-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .weather-box {
+            padding: 12px;
+            background: rgba(0,0,0,0.18);
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.02);
+        }
+
+        .weather-box-name {
+            font-size: 0.65rem;
+            font-weight: 800;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .weather-box-val {
+            font-size: 0.8rem;
+            font-weight: 600;
+            line-height: 1.4;
+            color: var(--text-primary);
+        }
+
+        /* Trip History Panel */
+        .history-panel {
+            display: none;
+        }
+
+        .history-list {
+            max-height: 160px;
+            overflow-y: auto;
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .history-item {
+            border: 1px solid var(--border-glass);
+            background: rgba(255, 255, 255, 0.02);
+            padding: 10px 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .history-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .history-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            gap: 8px;
+        }
+
+        .history-item-details {
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .history-badge {
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-size: 0.62rem;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        /* Floating Action Buttons Column */
+        .floating-actions {
+            position: absolute;
+            bottom: 30px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .fab {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-glass);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            color: var(--text-primary);
+        }
+
+        .fab:hover {
+            transform: scale(1.1);
+            background: rgba(21, 32, 58, 0.95);
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+        }
+
+        .fab.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+        }
+
+        .fab svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Animated Marker motion along route */
+        .moving-marker div {
+            background: #60a5fa !important;
+            width: 18px !important;
+            height: 18px !important;
+            border-radius: 50% !important;
+            border: 3px solid white !important;
+            box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.4) !important;
+            animation: pulse-marker 1.4s infinite ease-in-out;
+        }
+
+        @keyframes pulse-marker {
+            0% {
+                box-shadow: 0 0 0 0px rgba(59, 130, 246, 0.5);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0px rgba(59, 130, 246, 0);
+            }
+        }
+
+        /* Journey Control strip */
+        .journey-controls {
+            display: none;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-glass);
+            padding: 8px;
+            border-radius: 14px;
+            gap: 6px;
+        }
+
         .journey-controls button {
-            background: #0f172a;
-            margin: 0;
             flex: 1;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            color: var(--text-primary);
+            padding: 8px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .journey-controls button:hover {
+            background: rgba(255,255,255,0.08);
+            border-color: rgba(255,255,255,0.15);
+        }
+
+        .journey-controls button svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* Legend Card */
+        .legend {
+            position: absolute;
+            bottom: 30px;
+            left: 20px;
+            background: rgba(10, 16, 32, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-glass);
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 0.75rem;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .legend strong {
+            color: var(--text-primary);
+            font-family: var(--font-display);
+            font-size: 0.8rem;
+            letter-spacing: 0.3px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .legend-color {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 4px;
+        }
+
+        /* ------------------- RESPONSIVE MOBILE VIEW ------------------- */
+        @media (max-width: 767px) {
+            .sidebar {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                top: auto;
+                width: 100%;
+                height: 70vh;
+                border-radius: 28px 28px 0 0;
+                transform: translateY(0);
+                box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.6);
+                background: rgba(9, 14, 28, 0.95);
+            }
+            
+            .sidebar.collapsed {
+                transform: translateY(calc(100% - 94px));
+            }
+            
+            .bottom-sheet-handle {
+                display: block;
+            }
+            
+            .sidebar-header {
+                padding: 4px 26px 14px 26px;
+                cursor: pointer;
+            }
+
+            .sidebar-scroll {
+                padding: 16px 20px;
+                gap: 12px;
+            }
+            
+            .floating-actions {
+                bottom: 114px; /* Align above collapsed bottom sheet */
+                right: 16px;
+            }
+            
+            .legend {
+                bottom: auto;
+                top: 20px;
+                right: 20px;
+                left: auto;
+                font-size: 0.7rem;
+                padding: 8px 12px;
+                border-radius: 12px;
+            }
         }
     </style>
 </head>
 <body>
 <div class="app-container">
-    <div class="sidebar">
-        <h2>🚗 Route Risk Predictor</h2>
-        <div class="status-bar" id="status">💡 Type or click map to set START</div>
-
-        <div class="form-group">
-            <label>📍 START (type or click map)</label>
-            <input type="text" id="start" placeholder="e.g., Connaught Place, Delhi" autocomplete="off">
-            <button onclick="searchAddress('start')" class="search-btn">🔍 Search Start</button>
+    <div id="map"></div>
+    
+    <!-- Heatmap Risk Zones Legend -->
+    <div class="legend">
+        <strong>🔥 Accident risk zones</strong>
+        <div class="legend-item"><span class="legend-color" style="background:#ef4444;"></span> High Severity</div>
+        <div class="legend-item"><span class="legend-color" style="background:#f59e0b;"></span> Medium Severity</div>
+        <div class="legend-item"><span class="legend-color" style="background:#10b981;"></span> Low Severity</div>
+    </div>
+    
+    <!-- Floating Actions Panel -->
+    <div class="floating-actions">
+        <div class="fab" id="liveLocFab" onclick="getUserLocation()" title="Use Live Location">
+            <i data-lucide="navigation"></i>
         </div>
-        <div class="form-group">
-            <label>🏁 DESTINATION (type or click map)</label>
-            <input type="text" id="end" placeholder="e.g., Marine Drive, Mumbai" autocomplete="off">
-            <button onclick="searchAddress('end')" class="search-btn">🔍 Search Destination</button>
+        <div class="fab" id="speakRiskFab" onclick="speakNow()" title="Speak Current Risk">
+            <i data-lucide="volume-2"></i>
         </div>
-
-        <div class="form-group">
-            <label>📧 Email for alerts (optional)</label>
-            <input type="email" id="email" placeholder="you@example.com">
+        <div class="fab" id="historyFab" onclick="toggleHistory()" title="View Trip History">
+            <i data-lucide="history"></i>
         </div>
-        <div class="form-group">
-            <label>🚗 Vehicle</label>
-            <select id="vehicle">
-                <option>Car</option><option>Motorcycle</option><option>Truck</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label>⏰ Time of day</label>
-            <select id="time">
-                <option>Morning</option><option>Afternoon</option><option>Evening</option><option>Night</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label>🌤️ Weather (manual override for risk)</label>
-            <select id="weather">
-                <option>Clear</option><option>Rain</option><option>Fog</option><option>Snow</option>
-            </select>
-        </div>
-
-        <button onclick="getUserLocation()" style="background:#10b981;">📍 Use My Live Location</button>
-        <button onclick="calculateRoute()">🔍 Calculate Route & Risk</button>
-
-        <!-- Journey animation controls (appear after route is calculated) -->
-        <div id="journeyControls" class="journey-controls" style="display: none;">
-            <button id="startJourneyBtn">▶️ Start Journey</button>
-            <button id="pauseJourneyBtn">⏸️ Pause</button>
-            <button id="resetJourneyBtn">🔄 Reset</button>
-        </div>
-
-        <div class="voice-controls">
-            <button onclick="voiceOn()" class="voice-on">🔊 ON</button>
-            <button onclick="voiceOff()" class="voice-off">🔇 OFF</button>
-            <button onclick="voicePause()" class="voice-pause">⏸️ Pause</button>
-        </div>
-        <button onclick="speakNow()" style="background:#3b82f6;">🎤 Speak current risk</button>
-        <button onclick="clearAll()" style="background:#475569;">🗑️ Clear all</button>
-        <button onclick="showHistory()" style="background:#6b7280;">📜 View Trip History</button>
-        <button onclick="clearHistory()" style="background:#dc2626; font-size:12px;">🗑️ Clear History</button>
-
-        <div id="historyPanel" class="history-panel">
-            <strong>📜 Past Trips</strong>
-            <div id="historyList" class="history-list"></div>
-        </div>
-
-        <div id="riskCard" class="risk-card">
-            <div id="riskLevel" class="risk-level"></div>
-            <div id="routeInfo" class="route-info"></div>
-            <div id="riskFactors"></div>
-            <div id="emailStatus" style="font-size:12px; margin-top:10px; text-align:center;"></div>
-        </div>
-
-        <div id="weatherCard" class="weather-card">
-            <strong>🌤️ Live Weather Along Route</strong>
-            <div id="weatherInfo" class="weather-info"></div>
-        </div>
-
-        <div class="instruction">
-            ✅ Live location • Live weather • Trip history • Address autocomplete<br>
-            🚗 After route is drawn, use "Start Journey" to see a moving marker!
+        <div class="fab" id="clearFab" onclick="clearAll()" title="Clear Map">
+            <i data-lucide="refresh-cw"></i>
         </div>
     </div>
-    <div class="map-container">
-        <div id="map"></div>
-        <div class="legend">
-            <strong>🔥 Accident risk zones</strong><br>
-            <span class="legend-color" style="background:#ff0000;"></span> High<br>
-            <span class="legend-color" style="background:#ffaa00;"></span> Medium<br>
-            <span class="legend-color" style="background:#00cc44;"></span> Low
+    
+    <!-- Sidebar Dashboard Drawer -->
+    <div class="sidebar">
+        <!-- Interactive Drawer grabber for mobile -->
+        <div class="bottom-sheet-handle" onclick="toggleBottomSheet()"></div>
+        
+        <div class="sidebar-header" onclick="toggleBottomSheetOnMobileHeader()">
+            <h1>🚦 <span>Smart Traffic IQ</span></h1>
+            <div class="status-bar" id="status">
+                <i data-lucide="compass" style="width: 14px; height: 14px; flex-shrink: 0;"></i>
+                <span id="statusText">Configure route coordinates to start</span>
+            </div>
+        </div>
+        
+        <div class="sidebar-scroll">
+            <!-- Route Input Fields -->
+            <div class="form-group">
+                <label>📍 START POINT</label>
+                <div class="input-container">
+                    <i data-lucide="map-pin" class="input-icon"></i>
+                    <input type="text" id="start" placeholder="Type address or click map..." autocomplete="off">
+                    <button onclick="searchAddress('start'); event.stopPropagation();" class="inline-btn">Search</button>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>🏁 DESTINATION</label>
+                <div class="input-container">
+                    <i data-lucide="flag" class="input-icon"></i>
+                    <input type="text" id="end" placeholder="Type destination or click map..." autocomplete="off">
+                    <button onclick="searchAddress('end'); event.stopPropagation();" class="inline-btn">Search</button>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>📧 Email for Alerts (Optional)</label>
+                <div class="input-container">
+                    <i data-lucide="mail" class="input-icon"></i>
+                    <input type="email" id="email" placeholder="driver@safetyalert.com">
+                </div>
+            </div>
+            
+            <!-- Quick Parameter Selection Dropdowns -->
+            <div class="params-grid">
+                <div class="form-group">
+                    <label>🚗 Vehicle</label>
+                    <div class="select-wrapper">
+                        <select id="vehicle">
+                            <option>Car</option>
+                            <option>Motorcycle</option>
+                            <option>Truck</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>⏰ Time</label>
+                    <div class="select-wrapper">
+                        <select id="time">
+                            <option>Morning</option>
+                            <option>Afternoon</option>
+                            <option>Evening</option>
+                            <option>Night</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>🌤️ Weather</label>
+                    <div class="select-wrapper">
+                        <select id="weather" onchange="syncWeatherToSurface()">
+                            <option>Clear</option>
+                            <option>Rain</option>
+                            <option>Fog</option>
+                            <option>Snow</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Advanced ML Parameters Summary Dropdown -->
+            <div class="advanced-panel">
+                <div class="advanced-header" onclick="toggleAdvancedPanel()">
+                    <span>⚙️ Advanced ML Model inputs</span>
+                    <i data-lucide="chevron-down" id="advChevron" style="width: 14px; height: 14px;"></i>
+                </div>
+                <div class="advanced-content" id="advContent">
+                    <div class="form-group">
+                        <label>🔀 Junction Control</label>
+                        <div class="select-wrapper">
+                            <select id="junction_control">
+                                <option value="Not at junction or within 20 metres">Not at junction (Safe)</option>
+                                <option value="Give way or uncontrolled">Give way or uncontrolled</option>
+                                <option value="Auto traffic signal">Auto traffic signal</option>
+                                <option value="Stop sign">Stop sign</option>
+                                <option value="Authorised person">Authorised person control</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>🛣️ Road Type</label>
+                        <div class="select-wrapper">
+                            <select id="road_type">
+                                <option value="Single carriageway">Single carriageway</option>
+                                <option value="Dual carriageway">Dual carriageway</option>
+                                <option value="Roundabout">Roundabout</option>
+                                <option value="One way street">One way street</option>
+                                <option value="Slip road">Slip road</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>💦 Road Surface Condition</label>
+                        <div class="select-wrapper">
+                            <select id="road_surface">
+                                <option value="Dry">Dry</option>
+                                <option value="Wet or damp">Wet or damp</option>
+                                <option value="Frost or ice">Frost or ice</option>
+                                <option value="Snow">Snow</option>
+                                <option value="Flood over 3cm. deep">Flooding deep water</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>🏡 Region Area</label>
+                        <div class="select-wrapper">
+                            <select id="urban_rural">
+                                <option value="Urban">Urban Corridor</option>
+                                <option value="Rural">Rural Country Highway</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <label>⚡ Speed Limit</label>
+                        </div>
+                        <div class="slider-group">
+                            <input type="range" id="speed_limit" min="20" max="70" step="10" value="30" oninput="updateSliderVal(this.value)">
+                            <span class="slider-value" id="speedVal">30 mph</span>
+                        </div>
+                    </div>
+
+                    <div class="params-grid">
+                        <div class="form-group">
+                            <label>💥 Vehicles</label>
+                            <input type="number" id="num_vehicles" min="1" max="10" value="2">
+                        </div>
+                        <div class="form-group">
+                            <label>🩹 Casualties</label>
+                            <input type="number" id="num_casualties" min="1" max="20" value="1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Submit Button -->
+            <button onclick="calculateRoute()" class="primary-btn" id="calcBtn">
+                <i data-lucide="shield-alert"></i> Calculate Route & Predict Safety
+            </button>
+            
+            <!-- Voice Guidance Settings Row -->
+            <div class="voice-controls-row">
+                <span class="label-text">TTS Guidance:</span>
+                <button onclick="setVoice(true)" id="voiceOnBtn" class="voice-toggle-btn active">🔊 ON</button>
+                <button onclick="setVoice(false)" id="voiceOffBtn" class="voice-toggle-btn">🔇 OFF</button>
+                <button onclick="speakNow()" class="voice-toggle-btn" title="Re-narrate"><i data-lucide="play" style="width:12px; height:12px; display:inline;"></i> Narrate</button>
+            </div>
+            
+            <!-- Active Route Animation Control Panel -->
+            <div id="journeyControls" class="journey-controls">
+                <button id="startJourneyBtn">
+                    <i data-lucide="play"></i>
+                    <span>Simulate Route</span>
+                </button>
+                <button id="pauseJourneyBtn">
+                    <i data-lucide="pause"></i>
+                    <span>Pause</span>
+                </button>
+                <button id="resetJourneyBtn">
+                    <i data-lucide="rotate-ccw"></i>
+                    <span>Reset</span>
+                </button>
+            </div>
+            
+            <!-- Safety Risk Assessment Results Panel -->
+            <div id="riskCard" class="card risk-card">
+                <div class="risk-header">
+                    <div id="riskBadge" class="severity-badge">LOW RISK</div>
+                    <div class="confidence-indicator">
+                        Model Confidence: <span id="confidenceVal">75%</span>
+                        <div>
+                            <div class="confidence-bar"><div class="confidence-bar-fill" id="confidenceFill"></div></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="score-display-row">
+                    <div class="score-circle">
+                        <svg>
+                            <circle class="circle-bg" cx="34" cy="34" r="30"></circle>
+                            <circle class="circle-progress" id="scoreCircleFill" cx="34" cy="34" r="30"></circle>
+                        </svg>
+                        <div class="score-text" id="scoreText">42</div>
+                    </div>
+                    <div class="score-info">
+                        <span class="score-label">Composite Risk Rating</span>
+                        <span class="score-desc" id="scoreDesc">Standard Route Risk profile</span>
+                    </div>
+                </div>
+                
+                <div class="route-info-grid" id="routeInfo">
+                    <!-- Dynamic properties -->
+                </div>
+                
+                <div class="risk-factors-title">
+                    <i data-lucide="alert-triangle" style="color: var(--medium-color); width:14px; height:14px;"></i> ML Risk Factor Analysis
+                </div>
+                <ul id="riskFactors" class="risk-factors-list">
+                    <!-- Dynamic list items -->
+                </ul>
+                
+                <div id="emailStatus" style="font-size:0.75rem; font-weight:700; color: var(--low-color); margin-top:10px; text-align:center;"></div>
+            </div>
+            
+            <!-- Open-Meteo Weather Widget -->
+            <div id="weatherCard" class="card weather-card">
+                <div class="risk-factors-title">
+                    <i data-lucide="cloud-lightning" style="color: #60a5fa; width:14px; height:14px;"></i> Weather Conditions Forecast
+                </div>
+                <div id="weatherInfo" class="weather-grid">
+                    <!-- Dynamic weather cards -->
+                </div>
+            </div>
+            
+            <!-- TRIP LOG HISTORY PANEL -->
+            <div id="historyPanel" class="card history-panel">
+                <div class="risk-factors-title" style="justify-content: space-between; display: flex; align-items: center; margin-bottom: 0;">
+                    <span style="display: flex; align-items: center; gap: 6px;">
+                        <i data-lucide="history" style="color: var(--primary); width:14px; height:14px;"></i> Prediction Trip History
+                    </span>
+                    <button onclick="clearHistory()" style="background: transparent; border: none; color: var(--high-color); font-size: 0.72rem; font-weight: 800; cursor: pointer;">Delete Log</button>
+                </div>
+                <div id="historyList" class="history-list"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -295,10 +1204,16 @@
     let currentRouteData = null;
     let voiceEnabled = true;
     let currentUtterance = null;
-    let movingMarker = null;          // reference to the animated marker
-    let currentLatLngs = null;        // store route points for animation
+    
+    // Route trace simulation variables
+    let simulatedMarker = null;
+    let routeCoordsList = [];
+    let currentTraceIndex = 0;
+    let traceIntervalId = null;
+    let isTracePaused = false;
+    let cameraFollowsMarker = true;
 
-    // Accident hotspots (lat, lon, intensity)
+    // Accident hotspots derived from historical metrics
     const HOTSPOTS = [
         [28.6139, 77.2090, 0.95], [28.6300, 77.2200, 0.92], [28.5600, 77.3200, 0.88],
         [19.0760, 72.8777, 0.90], [19.1000, 72.8500, 0.85], [12.9716, 77.5946, 0.82],
@@ -308,39 +1223,71 @@
     ];
 
     function initMap() {
-        map = L.map('map').setView([20.5937, 78.9629], 5);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        // Initialize Leaflet map with coordinates centered on India
+        map = L.map('map', { zoomControl: false }).setView([20.5937, 78.9629], 5);
+        
+        // Re-position zoom buttons to top-right
+        L.control.zoom({ position: 'topright' }).addTo(map);
+
+        // CartoDB Dark Matter tile layer for premium visual look matching dark glass theme
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '© OpenStreetMap | TomTom traffic'
         }).addTo(map);
+        
         map.on('click', function(e) {
             const lat = e.latlng.lat, lng = e.latlng.lng;
             const coord = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
             if (selectingStart) {
                 setMarker('start', lat, lng, coord);
-                document.getElementById('status').innerHTML = '✅ Start set. Now click map for DESTINATION or type.';
+                updateStatus('Start location set. Click map for Destination.', 'active-status');
             } else {
                 setMarker('end', lat, lng, coord);
-                document.getElementById('status').innerHTML = '✅ Destination set. Click "Calculate Route & Risk".';
+                updateStatus('Destination set. Press Calculate Route.', 'active-status');
             }
             selectingStart = !selectingStart;
         });
+
         addHeatmap();
         setupAutocomplete();
+        
+        // Initialize Lucide icons on load
+        lucide.createIcons();
+    }
+
+    function updateStatus(text, className = '') {
+        const textNode = document.getElementById('statusText');
+        const statusBar = document.getElementById('status');
+        textNode.textContent = text;
+        
+        statusBar.className = 'status-bar';
+        if (className) {
+            statusBar.classList.add(className);
+        }
     }
 
     function addHeatmap() {
         if (heatLayer) map.removeLayer(heatLayer);
         heatLayer = L.heatLayer(HOTSPOTS, {
-            radius: 38, blur: 22, maxZoom: 12, minOpacity: 0.35,
-            gradient: { 0.2: '#00cc44', 0.5: '#ffaa00', 0.9: '#ff0000' }
+            radius: 35, blur: 20, maxZoom: 12, minOpacity: 0.4,
+            gradient: { 0.2: '#10b981', 0.5: '#f59e0b', 0.9: '#ef4444' }
         }).addTo(map);
     }
 
     function setMarker(type, lat, lng, label) {
         const marker = (type === 'start') ? startMarker : endMarker;
         if (marker) map.removeLayer(marker);
-        const newMarker = L.marker([lat, lng]).addTo(map);
-        newMarker.bindPopup(type === 'start' ? '📍 Start' : '🏁 Destination').openPopup();
+        
+        // Custom Leaflet styling for start/end points
+        const color = type === 'start' ? '#3b82f6' : '#a78bfa';
+        const customIcon = L.divIcon({
+            html: `<div style="background:${color}; width:14px; height:14px; border:2.5px solid white; border-radius:50%; box-shadow:0 0 10px rgba(0,0,0,0.5);"></div>`,
+            iconSize: [14, 14],
+            className: ''
+        });
+
+        const newMarker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
+        newMarker.bindPopup(type === 'start' ? '📍 Start Location' : '🏁 Destination Location').openPopup();
+        
         if (type === 'start') {
             startMarker = newMarker;
             document.getElementById('start').value = label;
@@ -350,7 +1297,59 @@
         }
     }
 
-    // ------------------- SAFE AUTOCOMPLETE (backend proxy) -------------------
+    // ------------------- ADVANCED PANEL AND SLIDER CONTROLS -------------------
+    function toggleAdvancedPanel() {
+        const content = document.getElementById('advContent');
+        const chevron = document.getElementById('advChevron');
+        content.classList.toggle('expanded');
+        
+        if (content.classList.contains('expanded')) {
+            chevron.setAttribute('data-lucide', 'chevron-up');
+        } else {
+            chevron.setAttribute('data-lucide', 'chevron-down');
+        }
+        lucide.createIcons();
+    }
+
+    function updateSliderVal(val) {
+        document.getElementById('speedVal').textContent = `${val} mph`;
+    }
+
+    function syncWeatherToSurface() {
+        const weather = document.getElementById('weather').value;
+        const roadSurface = document.getElementById('road_surface');
+        
+        if (weather === 'Rain') {
+            roadSurface.value = 'Wet or damp';
+        } else if (weather === 'Snow') {
+            roadSurface.value = 'Snow';
+        } else if (weather === 'Fog') {
+            roadSurface.value = 'Wet or damp';
+        } else {
+            roadSurface.value = 'Dry';
+        }
+    }
+
+    // ------------------- MOBILE BOTTOM SHEET DRAWER CONTROLS -------------------
+    function toggleBottomSheet() {
+        const sidebar = document.querySelector('.sidebar');
+        sidebar.classList.toggle('collapsed');
+    }
+
+    function toggleBottomSheetOnMobileHeader() {
+        if (window.innerWidth < 768) {
+            toggleBottomSheet();
+        }
+    }
+
+    function expandBottomSheet() {
+        const sidebar = document.querySelector('.sidebar');
+        if (window.innerWidth < 768) {
+            sidebar.classList.remove('collapsed');
+        }
+    }
+
+    // ------------------- GEOGRAPHIC API PROXIES -------------------
     function setupAutocomplete() {
         const startInput = document.getElementById('start');
         const endInput = document.getElementById('end');
@@ -382,43 +1381,30 @@
             input.addEventListener('change', async function() {
                 const value = this.value;
                 if (!value) return;
-                const res = await fetch('/geocode', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ address: value })
-                });
-                const data = await res.json();
-                if (data.error) return;
-                setMarker(pointType, data.lat, data.lon, value);
-                if (pointType === 'start') selectingStart = false;
-                else selectingStart = true;
+                try {
+                    const res = await fetch('/geocode', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ address: value })
+                    });
+                    const data = await res.json();
+                    if (data.error) return;
+                    setMarker(pointType, data.lat, data.lon, value);
+                    if (pointType === 'start') selectingStart = false;
+                    else selectingStart = true;
+                } catch (e) {
+                    console.error("Geocoding failed", e);
+                }
             });
         }
         attach(startInput, 'start');
         attach(endInput, 'end');
     }
 
-    // ------------------- LIVE LOCATION -------------------
-    function getUserLocation() {
-        if (!navigator.geolocation) { alert("Geolocation not supported"); return; }
-        document.getElementById('status').innerHTML = "📍 Getting your location...";
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                const lat = pos.coords.latitude, lng = pos.coords.longitude;
-                setMarker('start', lat, lng, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-                selectingStart = false;
-                document.getElementById('status').innerHTML = "✅ Live location set as START! Now set destination.";
-                map.setView([lat, lng], 12);
-            },
-            (err) => { alert("Location error: " + err.message); }
-        );
-    }
-
-    // ------------------- ADDRESS SEARCH (backend geocode) -------------------
     async function searchAddress(pointType) {
         const addr = document.getElementById(pointType).value.trim();
-        if (!addr) { alert("Enter an address"); return; }
-        document.getElementById('status').innerHTML = '🔍 Searching...';
+        if (!addr) { alert("Enter an address first"); return; }
+        updateStatus('Geocoding coordinates...', 'active-status');
         try {
             const resp = await fetch('/geocode', {
                 method: 'POST',
@@ -430,13 +1416,29 @@
             setMarker(pointType, data.lat, data.lon, addr);
             if (pointType === 'start') selectingStart = false;
             else selectingStart = true;
-            document.getElementById('status').innerHTML = `✅ ${pointType} found!`;
+            updateStatus(`${pointType.toUpperCase()} position resolved`, 'active-status');
         } catch (err) {
-            alert("Address not found. Try landmark or city.");
+            alert("Address not found. Please try entering a city or landmark.");
+            updateStatus('Address lookup failed');
         }
     }
 
-    // ------------------- TRIP HISTORY (localStorage) -------------------
+    function getUserLocation() {
+        if (!navigator.geolocation) { alert("Geolocation not supported by your browser"); return; }
+        updateStatus("Requesting satellite GPS coordinates...", "active-status");
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const lat = pos.coords.latitude, lng = pos.coords.longitude;
+                setMarker('start', lat, lng, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+                selectingStart = false;
+                updateStatus("Start coordinates mapped. Select destination.", "active-status");
+                map.setView([lat, lng], 14);
+            },
+            (err) => { alert("Location mapping error: " + err.message); }
+        );
+    }
+
+    // ------------------- TRIP LOG (localStorage) -------------------
     function saveTripToHistory(start, end, riskLevel, score, distance, duration) {
         let history = JSON.parse(localStorage.getItem('tripHistory') || '[]');
         history.unshift({
@@ -444,62 +1446,96 @@
             start, end,
             risk: riskLevel,
             score,
-            distance: distance.toFixed(0),
+            distance: distance.toFixed(1),
             duration: duration.toFixed(0),
-            date: new Date().toLocaleString()
+            date: new Date().toLocaleDateString()
         });
-        if (history.length > 20) history.pop();
+        if (history.length > 10) history.pop();
         localStorage.setItem('tripHistory', JSON.stringify(history));
     }
 
-    function showHistory() {
+    function toggleHistory() {
         const panel = document.getElementById('historyPanel');
+        const fab = document.getElementById('historyFab');
+        if (panel.style.display === 'block') {
+            panel.style.display = 'none';
+            fab.classList.remove('active');
+        } else {
+            showHistory();
+            panel.style.display = 'block';
+            fab.classList.add('active');
+            panel.scrollIntoView({ behavior: 'smooth' });
+        }
+    }
+
+    function showHistory() {
         const historyDiv = document.getElementById('historyList');
         let history = JSON.parse(localStorage.getItem('tripHistory') || '[]');
         if (history.length === 0) {
-            historyDiv.innerHTML = "<i>No trips saved yet.</i>";
+            historyDiv.innerHTML = "<div style='font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 12px 0;'>No previous safety logs found.</div>";
         } else {
-            historyDiv.innerHTML = history.map(t => `
+            historyDiv.innerHTML = history.map(t => {
+                const badgeClass = `badge-${t.risk}`;
+                return `
                 <div class="history-item" onclick="restoreTrip('${t.start.replace(/'/g, "\\'")}', '${t.end.replace(/'/g, "\\'")}')">
-                    <strong>${t.start} → ${t.end}</strong><br>
-                    Risk: ${t.risk} (${t.score}/100) | ${t.distance} km | ${t.duration} min<br>
-                    <small>${t.date}</small>
+                    <div class="history-item-header">
+                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; font-weight:600;">
+                            ${t.start.split(',')[0]} → ${t.end.split(',')[0]}
+                        </span>
+                        <span class="history-badge ${badgeClass}">${t.risk}</span>
+                    </div>
+                    <div class="history-item-details">
+                        <span>${t.distance} km | ${t.duration} mins</span>
+                        <span>${t.date}</span>
+                    </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
         }
-        panel.style.display = 'block';
     }
 
     function restoreTrip(start, end) {
         document.getElementById('start').value = start;
         document.getElementById('end').value = end;
         document.getElementById('historyPanel').style.display = 'none';
+        document.getElementById('historyFab').classList.remove('active');
         calculateRoute();
     }
 
     function clearHistory() {
-        if (confirm("Delete all trip history?")) {
+        if (confirm("Reset local safety log history?")) {
             localStorage.removeItem('tripHistory');
             document.getElementById('historyList').innerHTML = "";
             document.getElementById('historyPanel').style.display = 'none';
+            document.getElementById('historyFab').classList.remove('active');
         }
     }
 
-    // ------------------- ROUTE + RISK + WEATHER + MOVING MARKER -------------------
+    // ------------------- ML ROUTE SAFETY COMPUTATIONS -------------------
     async function calculateRoute() {
         const start = document.getElementById('start').value;
         const end = document.getElementById('end').value;
-        if (!start || !end) { alert("Set both start and destination"); return; }
+        if (!start || !end) { alert("Configure both starting and destination points."); return; }
 
-        document.getElementById('riskCard').style.display = 'block';
-        document.getElementById('riskLevel').innerHTML = "🔄 Calculating...";
+        const calcBtn = document.getElementById('calcBtn');
+        calcBtn.innerHTML = "<i class='loader' style='animation: spin 1s linear infinite;'></i> Processing ML Assessment...";
+        calcBtn.disabled = true;
 
         const payload = {
             start, end,
             vehicle: document.getElementById('vehicle').value,
             time: document.getElementById('time').value,
             weather: document.getElementById('weather').value,
-            email: document.getElementById('email').value
+            email: document.getElementById('email').value,
+            
+            // Advanced ML fields
+            speed_limit: document.getElementById('speed_limit').value,
+            junction_control: document.getElementById('junction_control').value,
+            road_type: document.getElementById('road_type').value,
+            road_surface: document.getElementById('road_surface').value,
+            urban_rural: document.getElementById('urban_rural').value,
+            num_vehicles: document.getElementById('num_vehicles').value,
+            num_casualties: document.getElementById('num_casualties').value
         };
 
         try {
@@ -515,137 +1551,265 @@
             const risk = data.risk;
             currentRouteData = { distance: route.distance_km, duration: route.duration_min, risk };
 
-            // Draw static route line
+            // Render route polyline on Leaflet
             if (routeLayer) map.removeLayer(routeLayer);
-            routeLayer = L.polyline(route.points, { color: '#2563eb', weight: 5 }).addTo(map);
-            map.fitBounds(routeLayer.getBounds());
-            addHeatmap();
+            routeLayer = L.polyline(route.points, { 
+                color: '#3b82f6', 
+                weight: 6, 
+                opacity: 0.85,
+                lineCap: 'round',
+                lineJoin: 'round'
+            }).addTo(map);
+            map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
 
-            // Store route points for moving marker
-            currentLatLngs = route.points.map(p => L.latLng(p[0], p[1]));
+            // Store coords for animation
+            routeCoordsList = route.points.map(p => L.latLng(p[0], p[1]));
 
-            // Destroy old moving marker if exists
-            if (movingMarker) {
-                movingMarker.remove();
-                movingMarker = null;
+            // Reset trace animation
+            stopJourneyTrace();
+
+            // Display journey animate strip
+            document.getElementById('journeyControls').style.display = 'flex';
+
+            // Show risk details dashboard
+            const riskCard = document.getElementById('riskCard');
+            riskCard.style.display = 'block';
+            riskCard.className = `card risk-card glow-${risk.level}`;
+
+            // Update badge + gauges
+            const badge = document.getElementById('riskBadge');
+            badge.textContent = `${risk.level} RISK`;
+            badge.className = `severity-badge badge-${risk.level}`;
+
+            // Confidence display
+            document.getElementById('confidenceVal').textContent = `${risk.confidence}%`;
+            document.getElementById('confidenceFill').style.width = `${risk.confidence}%`;
+
+            // Risk Score circle rendering
+            document.getElementById('scoreText').textContent = risk.score;
+            const circumference = 2 * Math.PI * 30; // r=30
+            const offset = circumference - (risk.score / 100) * circumference;
+            document.getElementById('scoreCircleFill').style.strokeDashoffset = offset;
+            
+            // Set circle progress color
+            const circleFill = document.getElementById('scoreCircleFill');
+            if (risk.level === 'HIGH') {
+                circleFill.style.stroke = 'var(--high-color)';
+            } else if (risk.level === 'MEDIUM') {
+                circleFill.style.stroke = 'var(--medium-color)';
+            } else {
+                circleFill.style.stroke = 'var(--low-color)';
             }
 
-            // Show journey control buttons
-            const controlsDiv = document.getElementById('journeyControls');
-            controlsDiv.style.display = 'flex';
-            // Setup button event listeners (only once)
-            setupJourneyButtons();
+            document.getElementById('scoreDesc').textContent = `Safety index indicates ${risk.severity.toLowerCase()} accident potential.`;
 
-            // Display risk and weather
-            document.getElementById('riskLevel').innerHTML = `${risk.level} RISK (Score ${risk.score}/100)`;
-            document.getElementById('riskLevel').className = `risk-level risk-${risk.level}`;
+            // Route Details grid
             document.getElementById('routeInfo').innerHTML = `
-                📍 ${route.distance_km.toFixed(0)} km &nbsp;|&nbsp;
-                ⏱️ ${route.duration_min.toFixed(0)} min<br>
-                🚦 Traffic delay: ${route.traffic_delay_min.toFixed(0)} min
+                <div class="route-info-item"><i data-lucide="milestone"></i> <span>${route.distance_km.toFixed(1)} km</span></div>
+                <div class="route-info-item"><i data-lucide="timer"></i> <span>${route.duration_min.toFixed(0)} mins</span></div>
+                <div class="route-info-item" style="grid-column: span 2;"><i data-lucide="gauge"></i> <span>Est. Traffic Delay: ${route.traffic_delay_min.toFixed(0)} min</span></div>
             `;
-            let factorsHtml = "<strong>⚠️ Risk factors</strong><ul>";
-            risk.factors.forEach(f => factorsHtml += `<li>${f}</li>`);
-            factorsHtml += "</ul>";
-            document.getElementById('riskFactors').innerHTML = factorsHtml;
-            if (data.email_sent) document.getElementById('emailStatus').innerHTML = "✅ Email sent!";
 
+            // Render risk factors lists
+            let factorsHtml = "";
+            risk.factors.forEach(f => {
+                const isAlert = f.includes('🏍️') || f.includes('⚡') || f.includes('🌧️') || f.includes('🌫️') || f.includes('⚠️');
+                factorsHtml += `<li class="${isAlert ? 'factor-alert' : ''}"><i data-lucide="circle-slash" style="width:12px; height:12px; flex-shrink: 0; margin-top:2px;"></i><span>${f}</span></li>`;
+            });
+            document.getElementById('riskFactors').innerHTML = factorsHtml;
+
+            if (data.email_sent) {
+                document.getElementById('emailStatus').innerHTML = "✅ Defensive routing guidelines emailed!";
+            } else {
+                document.getElementById('emailStatus').innerHTML = "";
+            }
+
+            // Weather Widget display
             if (data.weather_start && data.weather_end) {
                 document.getElementById('weatherCard').style.display = 'block';
                 document.getElementById('weatherInfo').innerHTML = `
-                    Start: ${data.weather_start.desc}, ${data.weather_start.temp}°C, wind ${data.weather_start.wind} km/h<br>
-                    Destination: ${data.weather_end.desc}, ${data.weather_end.temp}°C, wind ${data.weather_end.wind} km/h
+                    <div class="weather-box">
+                        <div class="weather-box-name">Start Weather</div>
+                        <div class="weather-box-val">
+                            🌡️ ${data.weather_start.temp}°C<br>
+                            💨 ${data.weather_start.wind} km/h<br>
+                            ☁️ ${data.weather_start.desc}
+                        </div>
+                    </div>
+                    <div class="weather-box">
+                        <div class="weather-box-name">Destination</div>
+                        <div class="weather-box-val">
+                            🌡️ ${data.weather_end.temp}°C<br>
+                            💨 ${data.weather_end.wind} km/h<br>
+                            ☁️ ${data.weather_end.desc}
+                        </div>
+                    </div>
                 `;
             }
 
+            // Save details to trip history log
             saveTripToHistory(start, end, risk.level, risk.score, route.distance_km, route.duration_min);
 
+            // Re-render Lucide icons
+            lucide.createIcons();
+
+            // Mobile bottom sheet auto-expand so user can see details
+            expandBottomSheet();
+            updateStatus('Model analysis computed successfully', 'active-status');
+
+            // Text-To-Speech alert narration
             if (voiceEnabled) {
-                let msg = `${risk.level} risk. ${route.distance_km.toFixed(0)} km, ${route.duration_min.toFixed(0)} min.`;
-                if (risk.level === 'HIGH') msg = "Warning! " + msg;
+                let msg = `AI Route assessment completed. This trip has a ${risk.level.toLowerCase()} risk rating, with a score of ${risk.score}. The model predicts ${risk.severity.toLowerCase()} accident severity. Stay alert and drive safely.`;
                 speakMessage(msg);
             }
         } catch (err) {
-            document.getElementById('riskLevel').innerHTML = `❌ Error: ${err.message}`;
+            alert(`Calculation failed: ${err.message}`);
+            updateStatus('Prediction calculation error');
+        } finally {
+            calcBtn.innerHTML = "<i data-lucide='shield-alert'></i> Calculate Route & Predict Safety";
+            calcBtn.disabled = false;
+            lucide.createIcons();
         }
     }
 
-    // ------------------- MOVING MARKER WITH LEAFLET.MARKERMOTION -------------------
-    function setupJourneyButtons() {
-        // Remove previous listeners to avoid duplicates
-        const startBtn = document.getElementById('startJourneyBtn');
-        const pauseBtn = document.getElementById('pauseJourneyBtn');
-        const resetBtn = document.getElementById('resetJourneyBtn');
-        const newStartBtn = startBtn.cloneNode(true);
-        const newPauseBtn = pauseBtn.cloneNode(true);
-        const newResetBtn = resetBtn.cloneNode(true);
-        startBtn.parentNode.replaceChild(newStartBtn, startBtn);
-        pauseBtn.parentNode.replaceChild(newPauseBtn, pauseBtn);
-        resetBtn.parentNode.replaceChild(newResetBtn, resetBtn);
+    // ------------------- TRACE VEHICLE SIMULATION -------------------
+    function startJourneyTrace() {
+        if (!routeCoordsList || routeCoordsList.length === 0) return;
+        
+        if (simulatedMarker) {
+            map.removeLayer(simulatedMarker);
+            simulatedMarker = null;
+        }
 
-        newStartBtn.addEventListener('click', () => {
-            if (!currentLatLngs || currentLatLngs.length === 0) return;
-            if (movingMarker) movingMarker.remove();
-            // Create moving marker with auto-rotation
-            const icon = L.divIcon({
-                html: '<div style="background:#1e3a8a; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 5px black;"></div>',
-                iconSize: [24, 24],
-                className: 'moving-marker'
-            });
-            // You can also use a car icon: https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png
-            movingMarker = L.markerMotion(currentLatLngs, 50, {  // 50 km/h speed
-                icon: icon,
-                rotation: true,
-                autoplay: true,
-                loop: false,
-                center: false   // set to true if you want map to follow marker
-            }).addTo(map);
-            movingMarker.on('end', () => {
-                speakMessage("You have reached your destination.");
-            });
+        const icon = L.divIcon({
+            html: '<div></div>',
+            iconSize: [18, 18],
+            className: 'moving-marker'
         });
-        newPauseBtn.addEventListener('click', () => {
-            if (movingMarker) movingMarker.pause();
-        });
-        newResetBtn.addEventListener('click', () => {
-            if (movingMarker) movingMarker.reset();
-        });
+
+        currentTraceIndex = 0;
+        isTracePaused = false;
+
+        simulatedMarker = L.marker(routeCoordsList[0], { icon: icon }).addTo(map);
+        simulatedMarker.bindPopup("🚨 Simulated vehicle actively driving route").openPopup();
+
+        // Start animating steps
+        clearInterval(traceIntervalId);
+        traceIntervalId = setInterval(traceStep, 150); // Tick speed
+        
+        document.getElementById('startJourneyBtn').querySelector('span').textContent = 'Restart';
+        updateStatus("Driving simulation started...", "active-status");
     }
 
-    // ------------------- VOICE -------------------
+    function traceStep() {
+        if (isTracePaused) return;
+
+        if (currentTraceIndex >= routeCoordsList.length) {
+            stopJourneyTrace();
+            speakMessage("Simulated vehicle arrived at destination.");
+            updateStatus("Simulation finished", "active-status");
+            return;
+        }
+
+        const nextPoint = routeCoordsList[currentTraceIndex];
+        simulatedMarker.setLatLng(nextPoint);
+
+        if (cameraFollowsMarker) {
+            map.panTo(nextPoint);
+        }
+
+        currentTraceIndex++;
+    }
+
+    function pauseJourneyTrace() {
+        if (!simulatedMarker) return;
+        isTracePaused = !isTracePaused;
+        const pauseBtn = document.getElementById('pauseJourneyBtn');
+        if (isTracePaused) {
+            pauseBtn.querySelector('span').textContent = 'Resume';
+            updateStatus("Simulation paused", "active-status");
+        } else {
+            pauseBtn.querySelector('span').textContent = 'Pause';
+            updateStatus("Simulation resumed", "active-status");
+        }
+    }
+
+    function stopJourneyTrace() {
+        clearInterval(traceIntervalId);
+        if (simulatedMarker) {
+            map.removeLayer(simulatedMarker);
+            simulatedMarker = null;
+        }
+        document.getElementById('startJourneyBtn').querySelector('span').textContent = 'Simulate Route';
+        document.getElementById('pauseJourneyBtn').querySelector('span').textContent = 'Pause';
+        isTracePaused = false;
+    }
+
+    // Attach simulation buttons
+    document.getElementById('startJourneyBtn').addEventListener('click', startJourneyTrace);
+    document.getElementById('pauseJourneyBtn').addEventListener('click', pauseJourneyTrace);
+    document.getElementById('resetJourneyBtn').addEventListener('click', () => {
+        stopJourneyTrace();
+        updateStatus("Simulation reset", "active-status");
+    });
+
+    // ------------------- TEXT-TO-SPEECH (TTS) -------------------
     function speakMessage(msg) {
         if (!voiceEnabled) return;
         if (currentUtterance) window.speechSynthesis.cancel();
         currentUtterance = new SpeechSynthesisUtterance(msg);
-        currentUtterance.rate = 0.9;
+        currentUtterance.rate = 0.95;
         currentUtterance.onend = () => { currentUtterance = null; };
         window.speechSynthesis.speak(currentUtterance);
     }
-    function voiceOn() { voiceEnabled = true; speakMessage("Voice on"); document.getElementById('status').innerHTML = "🔊 Voice ON"; }
-    function voiceOff() { voiceEnabled = false; if (currentUtterance) window.speechSynthesis.cancel(); document.getElementById('status').innerHTML = "🔇 Voice OFF"; }
-    function voicePause() { if (window.speechSynthesis.speaking) window.speechSynthesis.cancel(); }
+    
+    function setVoice(enabled) { 
+        voiceEnabled = enabled; 
+        if (enabled) {
+            speakMessage("Voice alerts enabled"); 
+            document.getElementById('voiceOnBtn').classList.add('active');
+            document.getElementById('voiceOffBtn').classList.remove('active');
+            updateStatus("Voice guidelines active", "active-status");
+        } else {
+            if (window.speechSynthesis.speaking) window.speechSynthesis.cancel(); 
+            document.getElementById('voiceOnBtn').classList.remove('active');
+            document.getElementById('voiceOffBtn').classList.add('active');
+            updateStatus("Voice guidelines muted");
+        }
+    }
+    
     function speakNow() {
-        if (!currentRouteData) speakMessage("Calculate a route first.");
-        else speakMessage(`${currentRouteData.risk.level} risk. ${currentRouteData.distance.toFixed(0)} km, ${currentRouteData.duration.toFixed(0)} min.`);
+        if (!currentRouteData) {
+            speakMessage("No active route calculated to predict.");
+        } else {
+            const risk = currentRouteData.risk;
+            speakMessage(`Route assessment alert. Safety score is ${risk.score}. Risk level is ${risk.level.toLowerCase()}, predicting ${risk.severity.toLowerCase()} accident severity.`);
+        }
     }
 
-    // ------------------- RESET -------------------
+    // ------------------- RESET SYSTEM STATE -------------------
     function clearAll() {
+        stopJourneyTrace();
+        
         if (startMarker) map.removeLayer(startMarker);
         if (endMarker) map.removeLayer(endMarker);
         if (routeLayer) map.removeLayer(routeLayer);
-        if (movingMarker) movingMarker.remove();
-        startMarker = endMarker = routeLayer = movingMarker = null;
+        
+        startMarker = endMarker = routeLayer = null;
         selectingStart = true;
         currentRouteData = null;
-        currentLatLngs = null;
+        routeCoordsList = [];
+        
         document.getElementById('start').value = '';
         document.getElementById('end').value = '';
+        document.getElementById('email').value = '';
         document.getElementById('riskCard').style.display = 'none';
         document.getElementById('weatherCard').style.display = 'none';
         document.getElementById('historyPanel').style.display = 'none';
         document.getElementById('journeyControls').style.display = 'none';
-        document.getElementById('status').innerHTML = '💡 Type or click map to set START';
+        
+        updateStatus('Configure route coordinates to start');
+        
         map.setView([20.5937, 78.9629], 5);
         addHeatmap();
     }
